@@ -133,9 +133,9 @@ start_backend() {
         return 1
     fi
 
-    # Check for venv in backend dir or project root
-    if [[ ! -d "${BACKEND_DIR}/venv" ]] && [[ ! -d "${PROJECT_ROOT}/venv" ]]; then
-        log_error "Virtual environment not found in ${BACKEND_DIR}/venv or ${PROJECT_ROOT}/venv"
+    # Check for .venv in backend dir or project root
+    if [[ ! -d "${BACKEND_DIR}/.venv" ]] && [[ ! -d "${PROJECT_ROOT}/.venv" ]]; then
+        log_error "Virtual environment not found in ${BACKEND_DIR}/.venv or ${PROJECT_ROOT}/.venv"
         return 1
     fi
 
@@ -143,10 +143,11 @@ start_backend() {
 
     # Start uvicorn in background with PYTHONPATH set for packages import
     (
-        export PYTHONPATH="${PROJECT_ROOT}:${PYTHONPATH}"
-        # Try backend venv first, then project root venv
-        source "${BACKEND_DIR}/venv/bin/activate" 2>/dev/null || source "${PROJECT_ROOT}/venv/bin/activate" 2>/dev/null || true
-        uvicorn app.main:app --reload --host 0.0.0.0 --port "${BACKEND_PORT}"
+        set +e  # Disable strict mode in subshell
+        export PYTHONPATH="${PROJECT_ROOT}:${PYTHONPATH:-}"
+        # Try backend .venv first, then project root .venv
+        source "${BACKEND_DIR}/.venv/bin/activate" 2>/dev/null || source "${PROJECT_ROOT}/.venv/bin/activate" 2>/dev/null || true
+        exec uvicorn app.main:app --reload --host 0.0.0.0 --port "${BACKEND_PORT}"
     ) >> "${BACKEND_LOG}" 2>&1 &
 
     BACKEND_PID=$!

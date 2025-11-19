@@ -22,7 +22,7 @@ export function DocumentViewer({ source }: DocumentViewerProps) {
   // Build API URL for document - strip 'documents/' prefix if present
   const getDocumentUrl = (path: string) => {
     const cleanPath = path.replace(/^documents\//, '');
-    return `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/documents/${cleanPath}`;
+    return `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'}/documents/${cleanPath}`;
   };
 
   return (

@@ -1,14 +1,31 @@
 """Document serving API endpoints."""
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import Response
 from pathlib import Path
 import mimetypes
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
 # Documents directory relative to project root
-PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
+# From /services/api/app/api/documents.py, need 5 parents to reach project root
+PROJECT_ROOT = Path(__file__).parent.parent.parent.parent.parent
 DOCUMENTS_DIR = PROJECT_ROOT / "documents"
+
+
+def find_document(filename: str) -> Path | None:
+    """
+    Search for a document file recursively in the documents directory.
+
+    Args:
+        filename: The filename to search for
+
+    Returns:
+        The full path if found, None otherwise
+    """
+    for path in DOCUMENTS_DIR.rglob(filename):
+        if path.is_file():
+            return path
+    return None
 
 
 @router.get("/{file_path:path}")
@@ -33,9 +50,15 @@ async def get_document(file_path: str):
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid path")
 
-    # Check if file exists
+    # Check if file exists at exact path
     if not full_path.exists():
-        raise HTTPException(status_code=404, detail=f"Document not found: {file_path}")
+        # Try recursive search for filename
+        filename = Path(file_path).name
+        found_path = find_document(filename)
+        if found_path:
+            full_path = found_path
+        else:
+            raise HTTPException(status_code=404, detail=f"Document not found: {file_path}")
 
     if not full_path.is_file():
         raise HTTPException(status_code=400, detail="Not a file")
@@ -45,8 +68,14 @@ async def get_document(file_path: str):
     if mime_type is None:
         mime_type = "application/octet-stream"
 
-    return FileResponse(
-        path=full_path,
+    # Read file and return with inline disposition for browser display
+    with open(full_path, "rb") as f:
+        content = f.read()
+
+    return Response(
+        content=content,
         media_type=mime_type,
-        filename=full_path.name
+        headers={
+            "Content-Disposition": f'inline; filename="{full_path.name}"'
+        }
     )
