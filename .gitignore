@@ -43,6 +43,8 @@ env/
 
 # Logs
 *.log
+logs/
+*.pid
 
 # Testing
 .pytest_cache/
@@ -55,3 +57,6 @@ htmlcov/
 # Temporary files
 *.tmp
 *.bak
+
+# Archives (reference material, kept locally)
+archives/
