@@ -2,6 +2,15 @@
 
 An intelligent text-based CLI agent that provides conversational access to a knowledge base stored in PostgreSQL with PGVector. Uses RAG (Retrieval Augmented Generation) to search through embedded documents and provide contextual, accurate responses with source citations. Supports multiple document formats including audio files with Whisper transcription.
 
+## 📚 Documentation
+
+**Comprehensive documentation is available in the [`claudedocs/`](./claudedocs/) directory:**
+
+- **[Architecture Overview](./claudedocs/architecture.md)** - System design, components, and data flow
+- **[API Reference](./claudedocs/api-reference.md)** - Complete API documentation and function signatures
+- **[Project Structure](./claudedocs/project-structure.md)** - Codebase organization and file descriptions
+- **[Documentation Index](./claudedocs/README.md)** - Navigation hub with cross-references
+
 ## 🎓 New to Docling?
 
 **Start with the tutorials!** Check out the [`docling_basics/`](./docling_basics/) folder for progressive examples that teach Docling fundamentals:

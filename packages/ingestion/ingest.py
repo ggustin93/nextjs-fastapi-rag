@@ -22,13 +22,15 @@ from .embedder import create_embedder
 try:
     from ..utils.db_utils import initialize_database, close_database, db_pool
     from ..utils.models import IngestionConfig, IngestionResult
+    from ..utils.supabase_client import SupabaseRestClient
 except ImportError:
     # For direct execution or testing
     import sys
     import os
     sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    from utils.db_utils import initialize_database, close_database, db_pool
-    from utils.models import IngestionConfig, IngestionResult
+    from packages.utils.db_utils import initialize_database, close_database, db_pool
+    from packages.utils.models import IngestionConfig, IngestionResult
+    from packages.utils.supabase_client import SupabaseRestClient
 
 # Load environment variables
 load_dotenv()
@@ -43,7 +45,8 @@ class DocumentIngestionPipeline:
         self,
         config: IngestionConfig,
         documents_folder: str = "documents",
-        clean_before_ingest: bool = True
+        clean_before_ingest: bool = True,
+        use_rest_api: bool = True
     ):
         """
         Initialize ingestion pipeline.
@@ -52,11 +55,13 @@ class DocumentIngestionPipeline:
             config: Ingestion configuration
             documents_folder: Folder containing markdown documents
             clean_before_ingest: Whether to clean existing data before ingestion (default: True)
+            use_rest_api: Whether to use REST API instead of direct PostgreSQL connection (default: True)
         """
         self.config = config
         self.documents_folder = documents_folder
         self.clean_before_ingest = clean_before_ingest
-        
+        self.use_rest_api = use_rest_api
+
         # Initialize components
         self.chunker_config = ChunkingConfig(
             chunk_size=config.chunk_size,
@@ -64,29 +69,41 @@ class DocumentIngestionPipeline:
             max_chunk_size=config.max_chunk_size,
             use_semantic_splitting=config.use_semantic_chunking
         )
-        
+
         self.chunker = create_chunker(self.chunker_config)
         self.embedder = create_embedder()
-        
+
+        # Initialize REST client if using REST API
+        self.rest_client = SupabaseRestClient() if use_rest_api else None
+
         self._initialized = False
     
     async def initialize(self):
         """Initialize database connections."""
         if self._initialized:
             return
-        
+
         logger.info("Initializing ingestion pipeline...")
-        
+
         # Initialize database connections
-        await initialize_database()
-        
+        if self.use_rest_api:
+            if self.rest_client:
+                await self.rest_client.initialize()
+                logger.info("Using Supabase REST API (HTTPS)")
+        else:
+            await initialize_database()
+            logger.info("Using direct PostgreSQL connection")
+
         self._initialized = True
         logger.info("Ingestion pipeline initialized")
-    
+
     async def close(self):
         """Close database connections."""
         if self._initialized:
-            await close_database()
+            if self.use_rest_api and self.rest_client:
+                await self.rest_client.close()
+            else:
+                await close_database()
             self._initialized = False
     
     async def ingest_documents(
@@ -402,58 +419,85 @@ class DocumentIngestionPipeline:
         chunks: List[DocumentChunk],
         metadata: Dict[str, Any]
     ) -> str:
-        """Save document and chunks to PostgreSQL."""
-        async with db_pool.acquire() as conn:
-            async with conn.transaction():
-                # Insert document
-                document_result = await conn.fetchrow(
-                    """
-                    INSERT INTO documents (title, source, content, metadata)
-                    VALUES ($1, $2, $3, $4)
-                    RETURNING id::text
-                    """,
-                    title,
-                    source,
-                    content,
-                    json.dumps(metadata)
-                )
-                
-                document_id = document_result["id"]
-                
-                # Insert chunks
-                for chunk in chunks:
-                    # Convert embedding to PostgreSQL vector string format
-                    embedding_data = None
-                    if hasattr(chunk, 'embedding') and chunk.embedding:
-                        # PostgreSQL vector format: '[1.0,2.0,3.0]' (no spaces after commas)
-                        embedding_data = '[' + ','.join(map(str, chunk.embedding)) + ']'
-                    
-                    await conn.execute(
-                        """
-                        INSERT INTO chunks (document_id, content, embedding, chunk_index, metadata, token_count)
-                        VALUES ($1::uuid, $2, $3::vector, $4, $5, $6)
-                        """,
-                        document_id,
-                        chunk.content,
-                        embedding_data,
-                        chunk.index,
-                        json.dumps(chunk.metadata),
-                        chunk.token_count
+        """Save document and chunks to PostgreSQL or via REST API."""
+        if self.use_rest_api and self.rest_client:
+            # Use REST API
+            document_id = await self.rest_client.insert_document(
+                title=title,
+                source=source,
+                content=content,
+                metadata=metadata
+            )
+
+            # Insert chunks via REST API
+            for i, chunk in enumerate(chunks):
+                if hasattr(chunk, 'embedding') and chunk.embedding:
+                    await self.rest_client.insert_chunk(
+                        document_id=document_id,
+                        content=chunk.content,
+                        embedding=chunk.embedding,
+                        chunk_index=i,
+                        metadata=chunk.metadata or {},
+                        token_count=chunk.token_count
                     )
-                
-                return document_id
+
+            return document_id
+        else:
+            # Use direct PostgreSQL connection
+            async with db_pool.acquire() as conn:
+                async with conn.transaction():
+                    # Insert document
+                    document_result = await conn.fetchrow(
+                        """
+                        INSERT INTO documents (title, source, content, metadata)
+                        VALUES ($1, $2, $3, $4)
+                        RETURNING id::text
+                        """,
+                        title,
+                        source,
+                        content,
+                        json.dumps(metadata)
+                    )
+
+                    document_id = document_result["id"]
+
+                    # Insert chunks
+                    for chunk in chunks:
+                        # Convert embedding to PostgreSQL vector string format
+                        embedding_data = None
+                        if hasattr(chunk, 'embedding') and chunk.embedding:
+                            # PostgreSQL vector format: '[1.0,2.0,3.0]' (no spaces after commas)
+                            embedding_data = '[' + ','.join(map(str, chunk.embedding)) + ']'
+
+                        await conn.execute(
+                            """
+                            INSERT INTO chunks (document_id, content, embedding, chunk_index, metadata, token_count)
+                            VALUES ($1::uuid, $2, $3::vector, $4, $5, $6)
+                            """,
+                            document_id,
+                            chunk.content,
+                            embedding_data,
+                            chunk.index,
+                            json.dumps(chunk.metadata),
+                            chunk.token_count
+                        )
+
+                    return document_id
     
     async def _clean_databases(self):
         """Clean existing data from databases."""
         logger.warning("Cleaning existing data from databases...")
-        
+
         # Clean PostgreSQL
-        async with db_pool.acquire() as conn:
-            async with conn.transaction():
-                await conn.execute("DELETE FROM chunks")
-                await conn.execute("DELETE FROM documents")
-        
-        logger.info("Cleaned PostgreSQL database")
+        if self.use_rest_api and self.rest_client:
+            await self.rest_client.delete_all_documents()
+            logger.info("Cleaned database via REST API")
+        else:
+            async with db_pool.acquire() as conn:
+                async with conn.transaction():
+                    await conn.execute("DELETE FROM chunks")
+                    await conn.execute("DELETE FROM documents")
+            logger.info("Cleaned PostgreSQL database")
 
 async def main():
     """Main function for running ingestion."""

@@ -78,7 +78,7 @@ async def search_knowledge_base(ctx: RunContext[None], query: str, limit: int = 
             await initialize_db()
 
         # Generate embedding for query
-        from ingestion.embedder import create_embedder
+        from packages.ingestion.embedder import create_embedder
         embedder = create_embedder()
         query_embedding = await embedder.embed_query(query)
 

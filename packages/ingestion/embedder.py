@@ -22,7 +22,7 @@ except ImportError:
     import sys
     import os
     sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    from utils.providers import get_embedding_client, get_embedding_model
+    from packages.utils.providers import get_embedding_client, get_embedding_model
 
 # Load environment variables
 load_dotenv()

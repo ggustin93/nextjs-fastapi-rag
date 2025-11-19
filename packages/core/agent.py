@@ -5,7 +5,6 @@ Text-based CLI agent that searches through knowledge base using semantic similar
 """
 
 import asyncio
-import asyncpg
 import json
 import logging
 import os
@@ -14,35 +13,43 @@ from typing import Any
 
 from dotenv import load_dotenv
 from pydantic_ai import Agent, RunContext
+from packages.utils.supabase_client import SupabaseRestClient
 
 # Load environment variables
 load_dotenv(".env")
 
 logger = logging.getLogger(__name__)
 
-# Global database pool
-db_pool = None
+# Global REST client
+rest_client = None
+
+# Global to track last search sources
+last_search_sources = []
+
+
+def get_last_sources():
+    """Get and clear the last search sources."""
+    global last_search_sources
+    sources = last_search_sources.copy()
+    last_search_sources = []
+    return sources
 
 
 async def initialize_db():
-    """Initialize database connection pool."""
-    global db_pool
-    if not db_pool:
-        db_pool = await asyncpg.create_pool(
-            os.getenv("DATABASE_URL"),
-            min_size=2,
-            max_size=10,
-            command_timeout=60
-        )
-        logger.info("Database connection pool initialized")
+    """Initialize Supabase REST client."""
+    global rest_client
+    if not rest_client:
+        rest_client = SupabaseRestClient()
+        await rest_client.initialize()
+        logger.info("Supabase REST client initialized")
 
 
 async def close_db():
-    """Close database connection pool."""
-    global db_pool
-    if db_pool:
-        await db_pool.close()
-        logger.info("Database connection pool closed")
+    """Close Supabase REST client."""
+    global rest_client
+    if rest_client:
+        await rest_client.close()
+        logger.info("Supabase REST client closed")
 
 
 async def search_knowledge_base(ctx: RunContext[None], query: str, limit: int = 5) -> str:
@@ -58,42 +65,50 @@ async def search_knowledge_base(ctx: RunContext[None], query: str, limit: int = 
     """
     try:
         # Ensure database is initialized
-        if not db_pool:
+        if not rest_client:
             await initialize_db()
 
         # Generate embedding for query
-        from ingestion.embedder import create_embedder
+        from packages.ingestion.embedder import create_embedder
         embedder = create_embedder()
         query_embedding = await embedder.embed_query(query)
 
-        # Convert to PostgreSQL vector format
-        embedding_str = '[' + ','.join(map(str, query_embedding)) + ']'
-
-        # Search using match_chunks function
-        async with db_pool.acquire() as conn:
-            results = await conn.fetch(
-                """
-                SELECT * FROM match_chunks($1::vector, $2)
-                """,
-                embedding_str,
-                limit
-            )
+        # Search using REST API
+        results = await rest_client.similarity_search(
+            query_embedding=query_embedding,
+            limit=limit
+        )
 
         # Format results for response
         if not results:
             return "No relevant information found in the knowledge base for your query."
 
-        # Build response with sources
+        # Build response with sources and track them globally
+        global last_search_sources
         response_parts = []
+        sources_tracked = []
+
         for i, row in enumerate(results, 1):
             similarity = row['similarity']
             content = row['content']
             doc_title = row['document_title']
             doc_source = row['document_source']
 
+            # Track source for frontend
+            sources_tracked.append({
+                'title': doc_title,
+                'path': doc_source,
+                'similarity': similarity
+            })
+
+            # Include both title and file path for exact source citation
+            source_citation = f"[Source: {doc_title} ({doc_source})]"
             response_parts.append(
-                f"[Source: {doc_title}]\n{content}\n"
+                f"{source_citation}\n{content}\n"
             )
+
+        # Store sources globally for retrieval
+        last_search_sources = sources_tracked
 
         if not response_parts:
             return "Found some results but they may not be directly relevant to your query. Please try rephrasing your question."
@@ -107,7 +122,7 @@ async def search_knowledge_base(ctx: RunContext[None], query: str, limit: int = 
 
 # Create the PydanticAI agent with the RAG tool
 agent = Agent(
-    'openai:gpt-4o.1-mini',
+    'openai:gpt-4o-mini',
     system_prompt="""You are an intelligent knowledge assistant with access to an organization's documentation and information.
 Your role is to help users find accurate information from the knowledge base.
 You have a professional yet friendly demeanor.

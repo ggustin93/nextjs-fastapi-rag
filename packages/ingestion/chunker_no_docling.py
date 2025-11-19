@@ -24,7 +24,7 @@ except ImportError:
     import sys
     import os
     sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    from utils.providers import get_embedding_client, get_ingestion_model
+    from packages.utils.providers import get_embedding_client, get_ingestion_model
 
 # Initialize clients with flexible providers
 embedding_client = get_embedding_client()
