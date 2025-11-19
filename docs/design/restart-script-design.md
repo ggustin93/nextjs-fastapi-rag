@@ -694,19 +694,20 @@ macOS Specific:
 
 ```
 Required Structure:
-    ├── backend/
-    │   ├── venv/
-    │   │   ├── bin/
-    │   │   │   └── activate
-    │   │   └── lib/
-    │   ├── app/
-    │   │   └── main.py
-    │   └── requirements.txt
-    │
-    ├── frontend/
-    │   ├── node_modules/ (or check package.json)
-    │   ├── package.json
-    │   └── next.config.js (optional)
+    ├── services/
+    │   ├── api/
+    │   │   ├── venv/
+    │   │   │   ├── bin/
+    │   │   │   │   └── activate
+    │   │   │   └── lib/
+    │   │   ├── app/
+    │   │   │   └── main.py
+    │   │   └── requirements.txt
+    │   │
+    │   └── web/
+    │       ├── node_modules/ (or check package.json)
+    │       ├── package.json
+    │       └── next.config.js (optional)
     │
     └── logs/ (created if missing)
 ```
@@ -721,8 +722,8 @@ Checks before startup:
    └─ Set PROJECT_ROOT dynamically
 
 2. Directory Accessibility
-   └─ backend/ directory exists and readable
-   └─ frontend/ directory exists and readable
+   └─ services/api/ directory exists and readable
+   └─ services/web/ directory exists and readable
    └─ logs/ directory can be created
 
 3. Port Availability
@@ -730,11 +731,11 @@ Checks before startup:
    └─ Port 8000 either free or has Python process
 
 4. Virtual Environment
-   └─ backend/venv/ directory exists
-   └─ backend/venv/bin/activate executable
+   └─ services/api/venv/ directory exists
+   └─ services/api/venv/bin/activate executable
 
 5. Node Modules (optional but recommended)
-   └─ frontend/node_modules exists
+   └─ services/web/node_modules exists
    └─ Warn if missing (may cause long initial startup)
 
 6. Dependencies
@@ -762,9 +763,9 @@ Service Configuration:
     BACKEND_PORT=8000                # uvicorn port
     FRONTEND_PORT=3000               # Next.js port
     BACKEND_HOST=0.0.0.0             # uvicorn host
-    BACKEND_DIR=backend              # relative path to backend
-    FRONTEND_DIR=frontend            # relative path to frontend
-    VENV_PATH=backend/venv           # relative path to venv
+    BACKEND_DIR=services/api         # relative path to backend
+    FRONTEND_DIR=services/web        # relative path to frontend
+    VENV_PATH=services/api/venv      # relative path to venv
 
 Logging Configuration:
     LOG_DIR=logs                      # log directory
@@ -823,7 +824,7 @@ Recovery Path:
     1. Detect: activation command returns error
     2. Log specific error
     3. Offer manual recovery:
-       - Recreate: python3 -m venv backend/venv
+       - Recreate: python3 -m venv services/api/venv
        - Reinstall: pip install -r requirements.txt
     4. Suggest manual startup
     5. Report status

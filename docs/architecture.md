@@ -8,20 +8,25 @@ Docling RAG Agent is an intelligent text-based CLI system that provides conversa
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│                        User Interface                         │
-│                     cli.py (Enhanced CLI)                     │
-│          • Colored output  • Statistics  • Streaming          │
-└────────────────────┬─────────────────────────────────────────┘
-                     │
-┌────────────────────▼─────────────────────────────────────────┐
+│                        User Interfaces                        │
+│  services/web/ (Next.js)    │    packages/core/cli.py         │
+│  • React chat interface     │    • Terminal CLI interface     │
+└────────────────────┬────────┴────────┬───────────────────────┘
+                     │                 │
+┌────────────────────▼─────────────────▼───────────────────────┐
+│                      FastAPI Backend                          │
+│                    services/api/app/main.py                   │
+│   • SSE streaming  • Health checks  • CORS configuration      │
+└──────┬───────────────────────────────────────────────────────┘
+       │
+┌──────▼───────────────────────────────────────────────────────┐
 │                      RAG Agent Core                           │
-│                    rag_agent.py (PydanticAI)                  │
-│   • Query processing  • Context management  • Tool orchestration   │
+│                 packages/core/agent.py (PydanticAI)           │
+│   • Query processing  • Context management  • Tool orchestration │
 └──────┬────────────────┬────────────────────┬─────────────────┘
        │                │                    │
-       │                │                    │
 ┌──────▼──────┐  ┌─────▼─────┐  ┌──────────▼──────────┐
-│  OpenAI LLM │  │  OpenAI   │  │  PostgreSQL/PGVector │
+│  OpenAI LLM │  │  OpenAI   │  │  Supabase/PGVector   │
 │   (GPT-4)   │  │ Embeddings│  │  • documents table   │
 │             │  │  (1536-d) │  │  • chunks table      │
 └─────────────┘  └───────────┘  │  • match_chunks()    │
@@ -29,16 +34,31 @@ Docling RAG Agent is an intelligent text-based CLI system that provides conversa
                                           ▲
 ┌─────────────────────────────────────────┘
 │              Ingestion Pipeline
-│         ingestion/ (Docling-based)
+│      packages/ingestion/ (Docling-based)
 │    • Document parsing  • Chunking  • Embedding
 └─────────────────────────────────────────────────────
 ```
 
 ## Core Components
 
-### 1. CLI Interface (`cli.py`)
+### 1. Web Interface (`services/web/`)
 
-**Purpose**: Enhanced user interface with rich features
+**Purpose**: Modern React chat interface
+
+**Key Features**:
+- 🎨 Next.js with App Router
+- 💬 Real-time streaming chat
+- 📱 Responsive design
+- 🔗 SSE-based backend communication
+
+**Technologies**:
+- Next.js 14+ with TypeScript
+- React hooks (useChat)
+- TailwindCSS for styling
+
+### 2. CLI Interface (`packages/core/cli.py`)
+
+**Purpose**: Terminal-based user interface with rich features
 
 **Key Features**:
 - 🎨 Colored output for improved readability
@@ -52,7 +72,21 @@ Docling RAG Agent is an intelligent text-based CLI system that provides conversa
 - Token streaming for real-time responses
 - Connection pooling for performance
 
-### 2. RAG Agent Core (`rag_agent.py`)
+### 3. FastAPI Backend (`services/api/`)
+
+**Purpose**: REST API with SSE streaming for RAG queries
+
+**Key Responsibilities**:
+- HTTP endpoint management
+- Server-Sent Events streaming
+- CORS configuration for frontend
+- Health monitoring
+
+**Endpoints**:
+- `POST /api/v1/chat/stream` - Streaming RAG responses
+- `GET /api/v1/chat/health` - Service health check
+
+### 4. RAG Agent Core (`packages/core/agent.py`)
 
 **Purpose**: Orchestrates RAG pipeline and manages agent behavior
 
@@ -76,7 +110,7 @@ agent = Agent(
 )
 ```
 
-### 3. Knowledge Base Search Tool
+### 5. Knowledge Base Search Tool
 
 **Function**: `search_knowledge_base(query: str, limit: int = 5) -> str`
 
@@ -93,7 +127,7 @@ agent = Agent(
 - **Dimensions**: 1536 (text-embedding-3-small)
 - **Index**: IVFFlat for efficient similarity search
 
-### 4. Ingestion Pipeline (`ingestion/`)
+### 6. Ingestion Pipeline (`packages/ingestion/`)
 
 #### 4.1 Document Ingestion (`ingest.py`)
 
@@ -274,9 +308,11 @@ RETURNS TABLE (
 ```
 User Input
     ↓
-CLI Interface (cli.py)
+Web UI (services/web/) or CLI (packages/core/cli.py)
     ↓
-RAG Agent (rag_agent.py)
+FastAPI Backend (services/api/)
+    ↓
+RAG Agent (packages/core/agent.py)
     ↓
 [Decision: Use search_knowledge_base tool?]
     ↓ Yes
@@ -427,13 +463,13 @@ Index Creation (PGVector)
 ## Extension Points
 
 ### 1. Custom Document Processors
-- Add new file type handlers in `ingestion/`
+- Add new file type handlers in `packages/ingestion/`
 - Integrate additional Docling features
 - Support proprietary formats
 
 ### 2. Alternative LLMs
 - Swap OpenAI for Anthropic, Cohere, or local models
-- Modify `providers.py` configuration
+- Modify `packages/utils/providers.py` configuration
 - Adjust prompt templates
 
 ### 3. Enhanced Search

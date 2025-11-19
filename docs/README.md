@@ -23,7 +23,7 @@ This documentation is organized into interconnected sections that cover all aspe
 If you're new to the project, start here:
 
 1. **[Main README](../README.md)** - Quick start guide and feature overview
-2. **[Docling Basics Tutorials](../docling_basics/README.md)** - Learn Docling fundamentals
+2. **[Docling Basics Tutorials](../data/examples/README.md)** - Learn Docling fundamentals
 3. **[Architecture Overview](./architecture.md)** - Understand the system design
 4. **[Project Structure](./project-structure.md)** - Navigate the codebase
 
@@ -118,7 +118,7 @@ Planning integration or scaling? Check:
 #### Document Ingestion
 - [Architecture - Ingestion Pipeline](./architecture.md#4-ingestion-pipeline-ingestion)
 - [API Reference - Ingestion Pipeline](./api-reference.md#ingestion-pipeline)
-- [Project Structure - ingestion/ Package](./project-structure.md#ingestion-package)
+- [Project Structure - packages/ingestion/](./project-structure.md#packagesingestion)
 
 #### Vector Search
 - [Architecture - Database Schema](./architecture.md#6-database-schema-sqlschemaql)
@@ -133,7 +133,7 @@ Planning integration or scaling? Check:
 #### CLI Interface
 - [Architecture - CLI Interface](./architecture.md#1-cli-interface-clipy)
 - [API Reference - CLI Commands](./api-reference.md#cli-commands)
-- [Project Structure - cli.py](./project-structure.md#clipy)
+- [Project Structure - packages/core/cli.py](./project-structure.md#clipy)
 
 ---
 
@@ -151,7 +151,7 @@ Planning integration or scaling? Check:
 #### Docling
 - [Architecture - Ingestion Pipeline](./architecture.md#4-ingestion-pipeline-ingestion)
 - [Architecture - ADR-003: Docling](./architecture.md#adr-003-docling-for-document-processing)
-- [Docling Basics Tutorials](../docling_basics/README.md)
+- [Docling Basics Tutorials](../data/examples/README.md)
 
 #### OpenAI
 - [Architecture - Technology Stack](./architecture.md#technology-stack)
@@ -199,33 +199,33 @@ Planning integration or scaling? Check:
 ### Component Dependencies
 
 ```
-CLI (cli.py)
-    ├── Uses: RAG Agent (rag_agent.py)
-    ├── Uses: Database Utilities (utils/db_utils.py)
-    └── Docs: Architecture §1, API Reference §CLI
+CLI (packages/core/cli.py)
+    ├── Uses: RAG Agent (packages/core/agent.py)
+    ├── Uses: Database Utilities (packages/utils/db_utils.py)
+    └── Docs: Architecture §2, API Reference §CLI
 
-RAG Agent (rag_agent.py)
+RAG Agent (packages/core/agent.py)
     ├── Uses: search_knowledge_base tool
-    ├── Uses: OpenAI LLM (utils/providers.py)
-    ├── Uses: Database Pool (utils/db_utils.py)
-    └── Docs: Architecture §2, API Reference §Agent API
+    ├── Uses: OpenAI LLM (packages/utils/providers.py)
+    ├── Uses: Database Pool (packages/utils/db_utils.py)
+    └── Docs: Architecture §4, API Reference §Agent API
 
 search_knowledge_base (tool)
-    ├── Uses: Embedding Generator (ingestion/embedder.py)
+    ├── Uses: Embedding Generator (packages/ingestion/embedder.py)
     ├── Uses: match_chunks (sql/schema.sql)
-    └── Docs: Architecture §3, API Reference §Tools
+    └── Docs: Architecture §5, API Reference §Tools
 
-Ingestion Pipeline (ingestion/)
+Ingestion Pipeline (packages/ingestion/)
     ├── Uses: Docling for processing
-    ├── Uses: Chunker (ingestion/chunker.py)
-    ├── Uses: Embedder (ingestion/embedder.py)
-    ├── Uses: Database (utils/db_utils.py)
-    └── Docs: Architecture §4, API Reference §Ingestion Pipeline
+    ├── Uses: Chunker (packages/ingestion/chunker.py)
+    ├── Uses: Embedder (packages/ingestion/embedder.py)
+    ├── Uses: Database (packages/utils/db_utils.py)
+    └── Docs: Architecture §6, API Reference §Ingestion Pipeline
 
-Database (PostgreSQL + PGVector)
+Database (Supabase + PGVector)
     ├── Schema: sql/schema.sql
-    ├── Utilities: utils/db_utils.py
-    └── Docs: Architecture §6, API Reference §Database Functions
+    ├── Utilities: packages/utils/db_utils.py
+    └── Docs: Architecture §7, API Reference §Database Functions
 ```
 
 ---
@@ -240,7 +240,7 @@ Database (PostgreSQL + PGVector)
 | API Reference | ✅ Complete | api-reference.md |
 | Project Structure | ✅ Complete | project-structure.md |
 | Quick Start | ✅ Complete | ../README.md |
-| Tutorials | ✅ Complete | ../docling_basics/README.md |
+| Tutorials | ✅ Complete | ../data/examples/README.md |
 | Development Guide | 🚧 Planned | Coming soon |
 
 ### Documentation Stats

@@ -2,25 +2,23 @@
 
 An intelligent text-based CLI agent that provides conversational access to a knowledge base stored in PostgreSQL with PGVector. Uses RAG (Retrieval Augmented Generation) to search through embedded documents and provide contextual, accurate responses with source citations. Supports multiple document formats including audio files with Whisper transcription.
 
-## 📚 Documentation
+## Documentation
 
-**Comprehensive documentation is available in the [`claudedocs/`](./claudedocs/) directory:**
+Documentation is available in the [`docs/`](./docs/) directory:
 
-- **[Architecture Overview](./claudedocs/architecture.md)** - System design, components, and data flow
-- **[API Reference](./claudedocs/api-reference.md)** - Complete API documentation and function signatures
-- **[Project Structure](./claudedocs/project-structure.md)** - Codebase organization and file descriptions
-- **[Documentation Index](./claudedocs/README.md)** - Navigation hub with cross-references
+- [Architecture Overview](./docs/architecture.md) - System design, components, and data flow
+- [API Reference](./docs/api-reference.md) - Complete API documentation and function signatures
+- [Project Structure](./docs/project-structure.md) - Codebase organization and file descriptions
+- [Quick Start Guide](./docs/quickstart.md) - Getting started with the chat interface
 
-## 🎓 New to Docling?
+## Learning Resources
 
-**Start with the tutorials!** Check out the [`docling_basics/`](./docling_basics/) folder for progressive examples that teach Docling fundamentals:
+Check out the [`data/examples/`](./data/examples/) folder for Docling tutorials:
 
-1. **Simple PDF Conversion** - Basic document processing
-2. **Multiple Format Support** - PDF, Word, PowerPoint handling
-3. **Audio Transcription** - Speech-to-text with Whisper
-4. **Hybrid Chunking** - Intelligent chunking for RAG systems
-
-These tutorials provide the foundation for understanding how this full RAG agent works. [**→ Go to Docling Basics**](./docling_basics/)
+1. Simple PDF Conversion - Basic document processing
+2. Multiple Format Support - PDF, Word, PowerPoint handling
+3. Audio Transcription - Speech-to-text with Whisper
+4. Hybrid Chunking - Intelligent chunking for RAG systems
 
 ## Features
 
@@ -110,10 +108,10 @@ Add your documents to the `documents/` folder. **Multiple formats supported via 
 ```bash
 # Ingest all supported documents in the documents/ folder
 # NOTE: By default, this CLEARS existing data before ingestion
-uv run python -m ingestion.ingest --documents documents/
+uv run python -m packages.ingestion.ingest --documents documents/
 
 # Adjust chunk size (default: 1000)
-uv run python -m ingestion.ingest --documents documents/ --chunk-size 800
+uv run python -m packages.ingestion.ingest --documents documents/ --chunk-size 800
 ```
 
 **⚠️ Important:** The ingestion process **automatically deletes all existing documents and chunks** from the database before adding new documents. This ensures a clean state and prevents duplicate data.
@@ -130,7 +128,7 @@ The ingestion pipeline will:
 
 ```bash
 # Run the Docling RAG Agent CLI
-uv run python cli.py
+uv run python -m packages.core.cli
 ```
 
 **Features:**
@@ -217,7 +215,7 @@ Audio files are automatically transcribed using **OpenAI Whisper Turbo** model:
 
 ### RAG Agent
 
-The main agent (`rag_agent.py`) that:
+The main agent (`packages/core/agent.py`) that:
 - Manages database connections with connection pooling
 - Handles interactive CLI with streaming responses
 - Performs knowledge base searches via RAG
@@ -338,21 +336,26 @@ Returns chunks with:
 ## Project Structure
 
 ```
-docling-rag-agent/
-├── cli.py                   # Enhanced CLI with colors and features (recommended)
-├── rag_agent.py             # Basic CLI agent with PydanticAI
-├── ingestion/
-│   ├── ingest.py            # Document ingestion pipeline
-│   ├── embedder.py          # Embedding generation with caching
-│   └── chunker.py           # Document chunking logic
-├── utils/
-│   ├── providers.py         # OpenAI model/client configuration
-│   ├── db_utils.py          # Database connection pooling
-│   └── models.py            # Pydantic models for config
-├── sql/
-│   └── schema.sql           # PostgreSQL schema with PGVector
-├── documents/               # Sample documents for ingestion
-├── pyproject.toml           # Project dependencies
-├── .env.example             # Environment variables template
-└── README.md                # This file
+osiris-multirag-agent/
+├── packages/                    # Core Python packages
+│   ├── core/                    # RAG agent and CLI
+│   │   ├── agent.py             # RAG agent with PydanticAI
+│   │   └── cli.py               # Enhanced CLI interface
+│   ├── ingestion/               # Document processing
+│   │   ├── ingest.py            # Ingestion pipeline
+│   │   ├── embedder.py          # Embedding generation
+│   │   └── chunker.py           # Document chunking
+│   └── utils/                   # Shared utilities
+│       ├── providers.py         # OpenAI configuration
+│       └── db_utils.py          # Database pooling
+├── services/                    # Deployable services
+│   ├── api/                     # FastAPI backend
+│   └── web/                     # Next.js frontend
+├── tests/                       # Test suite
+├── deploy/                      # Docker configuration
+├── docs/                        # Documentation
+├── sql/                         # Database schema
+├── documents/                   # Documents for ingestion
+├── pyproject.toml               # Project dependencies
+└── README.md                    # This file
 ```

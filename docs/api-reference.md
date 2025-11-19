@@ -238,7 +238,7 @@ CREATE INDEX idx_chunks_embedding ON chunks USING ivfflat (embedding vector_cosi
 
 Main ingestion function for processing and storing documents.
 
-**Location**: `ingestion/ingest.py`
+**Location**: `packages/ingestion/ingest.py`
 
 **Signature**:
 ```python
@@ -303,7 +303,7 @@ print(f"Created {stats['chunks_created']} chunks")
 
 Docling-based chunking for semantic text splitting.
 
-**Location**: `ingestion/chunker.py`
+**Location**: `packages/ingestion/chunker.py`
 
 **Signature**:
 ```python
@@ -357,7 +357,7 @@ chunks = chunk_document(
 
 OpenAI-based embedding generation with caching.
 
-**Location**: `ingestion/embedder.py`
+**Location**: `packages/ingestion/embedder.py`
 
 **Class**:
 ```python

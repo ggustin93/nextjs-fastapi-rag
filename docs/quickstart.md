@@ -4,14 +4,14 @@ This guide will help you quickly get the Next.js chat interface running with the
 
 ## Prerequisites
 
-1. **Backend Setup**: Ensure you have completed the backend setup (see `backend/README.md`)
+1. **Backend Setup**: Ensure you have completed the backend setup (see `services/api/README.md`)
 2. **Node.js**: Version 18.x or higher installed
 3. **Database**: PostgreSQL with documents ingested
 
 ## Step 1: Start the Backend
 
 ```bash
-cd backend
+cd services/api
 
 # Activate virtual environment
 source venv/bin/activate  # On Windows: venv\Scripts\activate
@@ -29,7 +29,7 @@ Verify it's running by visiting: `http://localhost:8000/api/v1/chat/health`
 Open a new terminal:
 
 ```bash
-cd frontend
+cd services/web
 
 # Install dependencies (if not already done)
 npm install
@@ -94,27 +94,28 @@ Try asking questions like:
 
 ```
 osiris-multirag-agent/
-├── backend/                 # FastAPI backend
-│   ├── app/
-│   │   ├── main.py         # FastAPI app with CORS
-│   │   ├── core/           # RAG wrapper
-│   │   └── api/            # Chat endpoint
-│   └── requirements.txt
-├── frontend/               # Next.js frontend
-│   ├── src/
-│   │   ├── app/           # Next.js App Router
-│   │   ├── components/    # React components
-│   │   │   ├── chat/      # Chat-specific components
-│   │   │   └── ui/        # shadcn/ui components
-│   │   ├── hooks/         # React hooks (useChat)
-│   │   ├── lib/           # API client, utilities
-│   │   └── types/         # TypeScript types
-│   └── package.json
-├── docling_rag_agent/     # Original Python RAG agent
-│   ├── rag_agent.py       # Core RAG logic
-│   ├── cli.py             # CLI interface
-│   └── ...
-└── QUICKSTART_CHAT.md     # This file
+├── packages/               # Core Python packages
+│   ├── core/              # RAG agent and CLI
+│   │   ├── agent.py       # Core RAG logic
+│   │   └── cli.py         # CLI interface
+│   └── ingestion/         # Document processing
+├── services/              # Deployable services
+│   ├── api/               # FastAPI backend
+│   │   ├── app/
+│   │   │   ├── main.py    # FastAPI app with CORS
+│   │   │   ├── core/      # RAG wrapper
+│   │   │   └── routers/   # Chat endpoint
+│   │   └── requirements.txt
+│   └── web/               # Next.js frontend
+│       ├── src/
+│       │   ├── app/       # Next.js App Router
+│       │   ├── components/# React components
+│       │   ├── hooks/     # React hooks (useChat)
+│       │   └── lib/       # API client, utilities
+│       └── package.json
+├── tests/                 # Python test suite
+├── deploy/                # Docker configuration
+└── docs/                  # Documentation
 ```
 
 ## Features
@@ -144,7 +145,7 @@ osiris-multirag-agent/
 
 ### Frontend connection errors
 - Verify `.env.local` has the correct API URL
-- Check CORS configuration in `backend/app/main.py`
+- Check CORS configuration in `services/api/app/main.py`
 - Check browser console for detailed error messages
 
 ### Database connection issues
@@ -202,10 +203,10 @@ npm run dev
 
 1. **Ingest Documents**: Use the CLI to ingest your documents
    ```bash
-   python cli.py ingest --path /path/to/docs
+   python -m packages.ingestion.ingest --documents /path/to/docs
    ```
 
-2. **Customize UI**: Modify components in `frontend/src/components/chat/`
+2. **Customize UI**: Modify components in `services/web/src/components/`
 
 3. **Add Features**: Extend functionality based on your needs
    - Session persistence
@@ -216,8 +217,8 @@ npm run dev
 
 ## Resources
 
-- [Backend Documentation](backend/README.md)
-- [Frontend Documentation](frontend/README.md)
+- [Backend Documentation](../services/api/README.md)
+- [Frontend Documentation](../services/web/README.md)
 - [Architecture Overview](claudedocs/architecture.md)
 - [API Reference](claudedocs/api-reference.md)
 - [Project Structure](claudedocs/project-structure.md)
