@@ -7,7 +7,8 @@ from httpx import AsyncClient, ASGITransport
 
 # Import the FastAPI app
 import sys
-sys.path.insert(0, "services/api")
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "services", "api"))
 from app.main import app
 
 
