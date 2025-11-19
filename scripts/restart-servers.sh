@@ -18,8 +18,8 @@ set -euo pipefail
 # Configuration
 #-------------------------------------------------------------------------------
 PROJECT_ROOT="/Users/pwablo/Documents/Gitlab/osiris-multirag-agent"
-BACKEND_DIR="${PROJECT_ROOT}/backend"
-FRONTEND_DIR="${PROJECT_ROOT}/frontend"
+BACKEND_DIR="${PROJECT_ROOT}/services/api"
+FRONTEND_DIR="${PROJECT_ROOT}/services/web"
 LOGS_DIR="${PROJECT_ROOT}/logs"
 
 BACKEND_PORT=8000
@@ -133,16 +133,19 @@ start_backend() {
         return 1
     fi
 
-    if [[ ! -d "${BACKEND_DIR}/venv" ]]; then
-        log_error "Virtual environment not found: ${BACKEND_DIR}/venv"
+    # Check for venv in backend dir or project root
+    if [[ ! -d "${BACKEND_DIR}/venv" ]] && [[ ! -d "${PROJECT_ROOT}/venv" ]]; then
+        log_error "Virtual environment not found in ${BACKEND_DIR}/venv or ${PROJECT_ROOT}/venv"
         return 1
     fi
 
     cd "${BACKEND_DIR}"
 
-    # Start uvicorn in background
+    # Start uvicorn in background with PYTHONPATH set for packages import
     (
-        source venv/bin/activate
+        export PYTHONPATH="${PROJECT_ROOT}:${PYTHONPATH}"
+        # Try backend venv first, then project root venv
+        source "${BACKEND_DIR}/venv/bin/activate" 2>/dev/null || source "${PROJECT_ROOT}/venv/bin/activate" 2>/dev/null || true
         uvicorn app.main:app --reload --host 0.0.0.0 --port "${BACKEND_PORT}"
     ) >> "${BACKEND_LOG}" 2>&1 &
 

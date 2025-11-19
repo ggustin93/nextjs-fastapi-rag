@@ -13,7 +13,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./sql/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ../sql/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U raguser"]
       interval: 10s
@@ -23,8 +23,8 @@ services:
   # RAG Voice Agent
   rag-agent:
     build:
-      context: .
-      dockerfile: Dockerfile.rag
+      context: ..
+      dockerfile: deploy/Dockerfile
     container_name: rag_voice_agent
     depends_on:
       postgres:
@@ -38,16 +38,16 @@ services:
       DEEPGRAM_API_KEY: ${DEEPGRAM_API_KEY}
       LOG_LEVEL: INFO
     volumes:
-      - ./documents:/app/documents
-      - ./.env:/app/.env
-    command: ["uv", "run", "python", "rag_agent.py", "dev"]
+      - ../documents:/app/documents
+      - ../.env:/app/.env
+    command: ["uv", "run", "python", "-m", "packages.core.agent"]
     restart: unless-stopped
 
   # Optional: Document ingestion service
   ingestion:
     build:
-      context: .
-      dockerfile: Dockerfile.rag
+      context: ..
+      dockerfile: deploy/Dockerfile
     container_name: rag_ingestion
     depends_on:
       postgres:
@@ -57,9 +57,9 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       LLM_CHOICE: ${LLM_CHOICE:-gpt-4o-mini}
     volumes:
-      - ./documents:/app/documents
-      - ./.env:/app/.env
-    command: ["uv", "run", "python", "ingestion/ingest.py", "--documents", "/app/documents"]
+      - ../documents:/app/documents
+      - ../.env:/app/.env
+    command: ["uv", "run", "python", "-m", "packages.ingestion.ingest", "--documents", "/app/documents"]
     profiles:
       - ingestion
 
