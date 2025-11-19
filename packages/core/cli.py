@@ -17,6 +17,8 @@ from datetime import datetime
 from dotenv import load_dotenv
 from pydantic_ai import Agent, RunContext
 
+from packages.__version__ import __version__
+
 # Load environment variables
 load_dotenv(".env")
 
@@ -147,7 +149,7 @@ class RAGAgentCLI:
     def print_banner(self):
         """Print welcome banner."""
         print(f"\n{Colors.CYAN}{Colors.BOLD}{'=' * 60}")
-        print("🤖 Docling RAG Knowledge Assistant")
+        print(f"Docling RAG Knowledge Assistant v{__version__}")
         print("=" * 60)
         print(f"{Colors.WHITE}AI-powered document search with streaming responses")
         print(f"Type 'exit', 'quit', or Ctrl+C to exit")

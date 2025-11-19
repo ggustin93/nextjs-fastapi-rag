@@ -1,9 +1,16 @@
 """FastAPI application entry point for Docling RAG Agent."""
+import sys
+import os
+
+# Add project root to path for package imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
 from app.api import chat, documents
+from packages.__version__ import __version__
 
 # Load environment variables
 load_dotenv()
@@ -12,7 +19,7 @@ load_dotenv()
 app = FastAPI(
     title="Docling RAG Agent API",
     description="RESTful API for conversational RAG using PydanticAI",
-    version="0.1.0"
+    version=__version__
 )
 
 # Configure CORS for Next.js frontend
@@ -38,7 +45,7 @@ async def root():
     """Root endpoint with API information."""
     return {
         "name": "Docling RAG Agent API",
-        "version": "0.1.0",
+        "version": __version__,
         "docs": "/docs",
         "health": "/api/v1/chat/health"
     }
