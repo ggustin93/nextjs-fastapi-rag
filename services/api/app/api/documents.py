@@ -63,10 +63,14 @@ async def get_document(file_path: str):
     if not full_path.is_file():
         raise HTTPException(status_code=400, detail="Not a file")
 
-    # Get mime type
+    # Get mime type - force PDF for .pdf files
     mime_type, _ = mimetypes.guess_type(str(full_path))
-    if mime_type is None:
-        mime_type = "application/octet-stream"
+
+    # Explicitly set PDF mime type for .pdf files
+    if full_path.suffix.lower() == '.pdf':
+        mime_type = 'application/pdf'
+    elif mime_type is None:
+        mime_type = 'application/octet-stream'
 
     # Read file and return with inline disposition for browser display
     with open(full_path, "rb") as f:
