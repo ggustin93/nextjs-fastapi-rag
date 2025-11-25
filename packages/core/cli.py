@@ -5,15 +5,15 @@ Command Line Interface for Docling RAG Agent.
 Enhanced CLI with colors, formatting, and improved user experience.
 """
 
-import asyncio
-import asyncpg
 import argparse
+import asyncio
 import logging
 import os
 import sys
-from typing import List, Dict, Any
 from datetime import datetime
+from typing import Any, Dict, List
 
+import asyncpg
 from dotenv import load_dotenv
 from pydantic_ai import Agent, RunContext
 
@@ -24,18 +24,19 @@ load_dotenv(".env")
 
 logger = logging.getLogger(__name__)
 
+
 # ANSI color codes for better formatting
 class Colors:
-    BLUE = '\033[94m'
-    GREEN = '\033[92m'
-    YELLOW = '\033[93m'
-    RED = '\033[91m'
-    MAGENTA = '\033[95m'
-    CYAN = '\033[96m'
-    WHITE = '\033[97m'
-    BOLD = '\033[1m'
-    UNDERLINE = '\033[4m'
-    END = '\033[0m'
+    BLUE = "\033[94m"
+    GREEN = "\033[92m"
+    YELLOW = "\033[93m"
+    RED = "\033[91m"
+    MAGENTA = "\033[95m"
+    CYAN = "\033[96m"
+    WHITE = "\033[97m"
+    BOLD = "\033[1m"
+    UNDERLINE = "\033[4m"
+    END = "\033[0m"
 
 
 # Global database pool
@@ -47,12 +48,9 @@ async def initialize_db():
     global db_pool
     if not db_pool:
         db_pool = await asyncpg.create_pool(
-            os.getenv("DATABASE_URL"),
-            min_size=2,
-            max_size=10,
-            command_timeout=60
+            os.getenv("DATABASE_URL"), min_size=2, max_size=10, command_timeout=60
         )
-        # logger.info("Database connection pool initialized")
+        logger.debug("Database connection pool initialized")
 
 
 async def close_db():
@@ -60,7 +58,7 @@ async def close_db():
     global db_pool
     if db_pool:
         await db_pool.close()
-        # logger.info("Database connection pool closed")
+        logger.debug("Database connection pool closed")
 
 
 async def search_knowledge_base(ctx: RunContext[None], query: str, limit: int = 5) -> str:
@@ -81,11 +79,12 @@ async def search_knowledge_base(ctx: RunContext[None], query: str, limit: int = 
 
         # Generate embedding for query
         from packages.ingestion.embedder import create_embedder
+
         embedder = create_embedder()
         query_embedding = await embedder.embed_query(query)
 
         # Convert to PostgreSQL vector format
-        embedding_str = '[' + ','.join(map(str, query_embedding)) + ']'
+        embedding_str = "[" + ",".join(map(str, query_embedding)) + "]"
 
         # Search using match_chunks function
         async with db_pool.acquire() as conn:
@@ -94,7 +93,7 @@ async def search_knowledge_base(ctx: RunContext[None], query: str, limit: int = 
                 SELECT * FROM match_chunks($1::vector, $2)
                 """,
                 embedding_str,
-                limit
+                limit,
             )
 
         # Format results for response
@@ -104,14 +103,12 @@ async def search_knowledge_base(ctx: RunContext[None], query: str, limit: int = 
         # Build response with sources
         response_parts = []
         for i, row in enumerate(results, 1):
-            similarity = row['similarity']
-            content = row['content']
-            doc_title = row['document_title']
-            doc_source = row['document_source']
+            similarity = row["similarity"]
+            content = row["content"]
+            doc_title = row["document_title"]
+            doc_source = row["document_source"]
 
-            response_parts.append(
-                f"[Source: {doc_title}]\n{content}\n"
-            )
+            response_parts.append(f"[Source: {doc_title}]\n{content}\n")
 
         if not response_parts:
             return "Found some results but they may not be directly relevant to your query. Please try rephrasing your question."
@@ -119,13 +116,13 @@ async def search_knowledge_base(ctx: RunContext[None], query: str, limit: int = 
         return f"Found {len(response_parts)} relevant results:\n\n" + "\n---\n".join(response_parts)
 
     except Exception as e:
-        # logger.error(f"Knowledge base search failed: {e}", exc_info=True)
+        logger.error(f"Knowledge base search failed: {e}", exc_info=True)
         return f"I encountered an error searching the knowledge base: {str(e)}"
 
 
 # Create the PydanticAI agent with the RAG tool
 agent = Agent(
-    'openai:gpt-4o-mini',
+    "openai:gpt-4o-mini",
     system_prompt="""You are an intelligent knowledge assistant with access to an organization's documentation and information.
 Your role is to help users find accurate information from the knowledge base.
 You have a professional yet friendly demeanor.
@@ -135,7 +132,7 @@ If information isn't in the knowledge base, clearly state that and offer general
 Be concise but thorough in your responses.
 Ask clarifying questions if the user's query is ambiguous.
 When you find relevant information, synthesize it clearly and cite the source documents.""",
-    tools=[search_knowledge_base]
+    tools=[search_knowledge_base],
 )
 
 
@@ -152,8 +149,8 @@ class RAGAgentCLI:
         print(f"Docling RAG Knowledge Assistant v{__version__}")
         print("=" * 60)
         print(f"{Colors.WHITE}AI-powered document search with streaming responses")
-        print(f"Type 'exit', 'quit', or Ctrl+C to exit")
-        print(f"Type 'help' for commands")
+        print("Type 'exit', 'quit', or Ctrl+C to exit")
+        print("Type 'help' for commands")
         print("=" * 60 + f"{Colors.END}\n")
 
     def print_help(self):
@@ -203,7 +200,9 @@ class RAGAgentCLI:
                     doc_count = await conn.fetchval("SELECT COUNT(*) FROM documents")
                     chunk_count = await conn.fetchval("SELECT COUNT(*) FROM chunks")
 
-                    print(f"{Colors.GREEN}✓ Knowledge base ready: {doc_count} documents, {chunk_count} chunks{Colors.END}")
+                    print(
+                        f"{Colors.GREEN}✓ Knowledge base ready: {doc_count} documents, {chunk_count} chunks{Colors.END}"
+                    )
                     return True
             return False
         except Exception as e:
@@ -219,11 +218,13 @@ class RAGAgentCLI:
             if isinstance(msg, ModelResponse):
                 for part in msg.parts:
                     if isinstance(part, ToolCallPart):
-                        tools_used.append({
-                            'tool_name': part.tool_name,
-                            'args': part.args,
-                            'tool_call_id': part.tool_call_id
-                        })
+                        tools_used.append(
+                            {
+                                "tool_name": part.tool_name,
+                                "args": part.args,
+                                "tool_call_id": part.tool_call_id,
+                            }
+                        )
         return tools_used
 
     def format_tools_used(self, tools: List[Dict[str, Any]]) -> str:
@@ -233,18 +234,22 @@ class RAGAgentCLI:
 
         formatted = f"\n{Colors.MAGENTA}{Colors.BOLD}🛠 Tools Used:{Colors.END}\n"
         for i, tool in enumerate(tools, 1):
-            tool_name = tool.get('tool_name', 'unknown')
-            args = tool.get('args', {})
+            tool_name = tool.get("tool_name", "unknown")
+            args = tool.get("args", {})
 
             formatted += f"  {Colors.CYAN}{i}. {tool_name}{Colors.END}"
 
             # Show key arguments for context (handle both dict and other types)
             if args and isinstance(args, dict):
                 key_args = []
-                if 'query' in args:
-                    query_preview = str(args['query'])[:50] + '...' if len(str(args['query'])) > 50 else str(args['query'])
+                if "query" in args:
+                    query_preview = (
+                        str(args["query"])[:50] + "..."
+                        if len(str(args["query"])) > 50
+                        else str(args["query"])
+                    )
                     key_args.append(f"query='{query_preview}'")
-                if 'limit' in args:
+                if "limit" in args:
                     key_args.append(f"limit={args['limit']}")
 
                 if key_args:
@@ -260,10 +265,7 @@ class RAGAgentCLI:
             print(f"\n{Colors.BOLD}🤖 Assistant:{Colors.END} ", end="", flush=True)
 
             # Stream the response using run_stream
-            async with agent.run_stream(
-                message,
-                message_history=self.message_history
-            ) as result:
+            async with agent.run_stream(message, message_history=self.message_history) as result:
                 # Stream text as it comes in (delta=True for only new tokens)
                 async for text in result.stream_text(delta=True):
                     # Print only the new token
@@ -285,7 +287,7 @@ class RAGAgentCLI:
 
         except Exception as e:
             print(f"\n{Colors.RED}✗ Error: {e}{Colors.END}")
-            # logger.error(f"Chat error: {e}", exc_info=True)
+            logger.error(f"Chat error: {e}", exc_info=True)
 
     async def run(self):
         """Run the CLI main loop."""
@@ -293,10 +295,14 @@ class RAGAgentCLI:
 
         # Check database connection
         if not await self.check_database():
-            print(f"{Colors.RED}Cannot connect to database. Please check your DATABASE_URL.{Colors.END}")
+            print(
+                f"{Colors.RED}Cannot connect to database. Please check your DATABASE_URL.{Colors.END}"
+            )
             return
 
-        print(f"{Colors.GREEN}Ready to chat! Ask me anything about the knowledge base.{Colors.END}\n")
+        print(
+            f"{Colors.GREEN}Ready to chat! Ask me anything about the knowledge base.{Colors.END}\n"
+        )
 
         try:
             while True:
@@ -308,17 +314,19 @@ class RAGAgentCLI:
                         continue
 
                     # Handle commands
-                    if user_input.lower() in ['exit', 'quit', 'bye']:
-                        print(f"{Colors.CYAN}👋 Thank you for using the knowledge assistant. Goodbye!{Colors.END}")
+                    if user_input.lower() in ["exit", "quit", "bye"]:
+                        print(
+                            f"{Colors.CYAN}👋 Thank you for using the knowledge assistant. Goodbye!{Colors.END}"
+                        )
                         break
-                    elif user_input.lower() == 'help':
+                    elif user_input.lower() == "help":
                         self.print_help()
                         continue
-                    elif user_input.lower() == 'clear':
+                    elif user_input.lower() == "clear":
                         self.message_history = []
                         print(f"{Colors.GREEN}✓ Conversation history cleared{Colors.END}")
                         continue
-                    elif user_input.lower() == 'stats':
+                    elif user_input.lower() == "stats":
                         self.print_stats()
                         continue
 
@@ -334,7 +342,7 @@ class RAGAgentCLI:
 
         except Exception as e:
             print(f"{Colors.RED}✗ CLI error: {e}{Colors.END}")
-            # logger.error(f"CLI error: {e}", exc_info=True)
+            logger.error(f"CLI error: {e}", exc_info=True)
         finally:
             await close_db()
 
@@ -343,20 +351,17 @@ def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(
         description="Enhanced CLI for Docling RAG Agent",
-        formatter_class=argparse.RawDescriptionHelpFormatter
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
     parser.add_argument(
-        '--verbose', '-v',
-        action='store_true',
-        help='Enable verbose logging (shows httpx and other debug logs)'
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Enable verbose logging (shows httpx and other debug logs)",
     )
 
-    parser.add_argument(
-        '--model',
-        default=None,
-        help='Override LLM model (e.g., gpt-4o)'
-    )
+    parser.add_argument("--model", default=None, help="Override LLM model (e.g., gpt-4o)")
 
     args = parser.parse_args()
 
@@ -367,25 +372,22 @@ def main():
         log_level = logging.WARNING  # Only show warnings and errors
 
     logging.basicConfig(
-        level=log_level,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        level=log_level, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
 
     # Explicitly suppress httpx logging unless verbose mode
     if not args.verbose:
-        logging.getLogger('httpx').setLevel(logging.WARNING)
-        logging.getLogger('httpcore').setLevel(logging.WARNING)
-        logging.getLogger('openai').setLevel(logging.WARNING)
+        logging.getLogger("httpx").setLevel(logging.WARNING)
+        logging.getLogger("httpcore").setLevel(logging.WARNING)
+        logging.getLogger("openai").setLevel(logging.WARNING)
 
     # Override model if specified
     if args.model:
         global agent
         agent = Agent(
-            f'openai:{args.model}',
-            system_prompt=agent.system_prompt,
-            tools=[search_knowledge_base]
+            f"openai:{args.model}", system_prompt=agent.system_prompt, tools=[search_knowledge_base]
         )
-        # logger.info(f"Using model: {args.model}")
+        logger.info(f"Using model: {args.model}")
 
     # Check required environment variables
     if not os.getenv("DATABASE_URL"):
@@ -405,7 +407,7 @@ def main():
         print(f"\n{Colors.CYAN}👋 Goodbye!{Colors.END}")
     except Exception as e:
         print(f"{Colors.RED}✗ CLI startup error: {e}{Colors.END}")
-        # logger.error(f"Startup error: {e}", exc_info=True)
+        logger.error(f"Startup error: {e}", exc_info=True)
         sys.exit(1)
 
 

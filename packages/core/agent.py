@@ -5,14 +5,13 @@ Text-based CLI agent that searches through knowledge base using semantic similar
 """
 
 import asyncio
-import json
 import logging
 import os
 import sys
-from typing import Any
 
 from dotenv import load_dotenv
 from pydantic_ai import Agent, RunContext
+
 from packages.utils.supabase_client import SupabaseRestClient
 
 # Load environment variables
@@ -70,14 +69,12 @@ async def search_knowledge_base(ctx: RunContext[None], query: str, limit: int = 
 
         # Generate embedding for query
         from packages.ingestion.embedder import create_embedder
+
         embedder = create_embedder()
         query_embedding = await embedder.embed_query(query)
 
         # Search using REST API
-        results = await rest_client.similarity_search(
-            query_embedding=query_embedding,
-            limit=limit
-        )
+        results = await rest_client.similarity_search(query_embedding=query_embedding, limit=limit)
 
         # Format results for response
         if not results:
@@ -89,23 +86,19 @@ async def search_knowledge_base(ctx: RunContext[None], query: str, limit: int = 
         sources_tracked = []
 
         for i, row in enumerate(results, 1):
-            similarity = row['similarity']
-            content = row['content']
-            doc_title = row['document_title']
-            doc_source = row['document_source']
+            similarity = row["similarity"]
+            content = row["content"]
+            doc_title = row["document_title"]
+            doc_source = row["document_source"]
 
             # Track source for frontend
-            sources_tracked.append({
-                'title': doc_title,
-                'path': doc_source,
-                'similarity': similarity
-            })
+            sources_tracked.append(
+                {"title": doc_title, "path": doc_source, "similarity": similarity}
+            )
 
             # Include both title and file path for exact source citation
             source_citation = f"[Source: {doc_title} ({doc_source})]"
-            response_parts.append(
-                f"{source_citation}\n{content}\n"
-            )
+            response_parts.append(f"{source_citation}\n{content}\n")
 
         # Store sources globally for retrieval
         last_search_sources = sources_tracked
@@ -122,7 +115,7 @@ async def search_knowledge_base(ctx: RunContext[None], query: str, limit: int = 
 
 # Create the PydanticAI agent with the RAG tool
 agent = Agent(
-    'openai:gpt-4o-mini',
+    "openai:gpt-4o-mini",
     system_prompt="""You are an intelligent knowledge assistant with access to an organization's documentation and information.
 Your role is to help users find accurate information from the knowledge base.
 You have a professional yet friendly demeanor.
@@ -132,7 +125,7 @@ If information isn't in the knowledge base, clearly state that and offer general
 Be concise but thorough in your responses.
 Ask clarifying questions if the user's query is ambiguous.
 When you find relevant information, synthesize it clearly and cite the source documents.""",
-    tools=[search_knowledge_base]
+    tools=[search_knowledge_base],
 )
 
 
@@ -164,7 +157,7 @@ async def run_cli():
                 continue
 
             # Check for exit commands
-            if user_input.lower() in ['quit', 'exit', 'bye']:
+            if user_input.lower() in ["quit", "exit", "bye"]:
                 print("\nAssistant: Thank you for using the knowledge assistant. Goodbye!")
                 break
 
@@ -172,10 +165,7 @@ async def run_cli():
 
             try:
                 # Stream the response using run_stream
-                async with agent.run_stream(
-                    user_input,
-                    message_history=message_history
-                ) as result:
+                async with agent.run_stream(user_input, message_history=message_history) as result:
                     # Stream text as it comes in (delta=True for only new tokens)
                     async for text in result.stream_text(delta=True):
                         # Print only the new token
@@ -205,13 +195,12 @@ async def main():
     """Main entry point."""
     # Configure logging
     logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
 
     # Check required environment variables
-    if not os.getenv("DATABASE_URL"):
-        logger.error("DATABASE_URL environment variable is required")
+    if not os.getenv("SUPABASE_URL"):
+        logger.error("SUPABASE_URL environment variable is required")
         sys.exit(1)
 
     if not os.getenv("OPENAI_API_KEY"):
