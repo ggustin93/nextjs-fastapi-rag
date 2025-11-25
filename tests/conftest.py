@@ -5,7 +5,7 @@ Pytest configuration and shared fixtures.
 import pytest
 
 # Enable async testing
-pytest_plugins = ['pytest_asyncio']
+pytest_plugins = ["pytest_asyncio"]
 
 
 @pytest.fixture(autouse=True)

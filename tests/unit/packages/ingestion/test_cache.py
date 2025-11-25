@@ -2,7 +2,6 @@
 Tests for embedding cache.
 """
 
-import pytest
 from packages.ingestion.embedder import EmbeddingCache
 
 
@@ -61,7 +60,7 @@ class TestEmbeddingCache:
         cache.put("text3", [3.0])
 
         assert cache.get("text1") == [1.0]  # Still there
-        assert cache.get("text2") is None    # Evicted
+        assert cache.get("text2") is None  # Evicted
         assert cache.get("text3") == [3.0]
 
     def test_default_max_size(self):

@@ -2,12 +2,14 @@
 Tests for FastAPI endpoints.
 """
 
-import pytest
-from httpx import AsyncClient, ASGITransport
+import os
 
 # Import the FastAPI app
 import sys
-import os
+
+import pytest
+from httpx import ASGITransport, AsyncClient
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "services", "api"))
 from app.main import app
 

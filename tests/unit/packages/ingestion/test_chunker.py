@@ -3,6 +3,7 @@ Tests for chunking configuration and data structures.
 """
 
 import pytest
+
 from packages.ingestion.chunker import ChunkingConfig, DocumentChunk
 
 
@@ -44,11 +45,7 @@ class TestDocumentChunk:
     def test_basic_chunk_creation(self):
         """Create a basic chunk."""
         chunk = DocumentChunk(
-            content="Test content",
-            index=0,
-            start_char=0,
-            end_char=12,
-            metadata={"title": "Test"}
+            content="Test content", index=0, start_char=0, end_char=12, metadata={"title": "Test"}
         )
         assert chunk.content == "Test content"
         assert chunk.index == 0
@@ -57,35 +54,18 @@ class TestDocumentChunk:
     def test_token_count_estimation(self):
         """Token count is estimated if not provided."""
         content = "A" * 400  # 400 characters
-        chunk = DocumentChunk(
-            content=content,
-            index=0,
-            start_char=0,
-            end_char=400,
-            metadata={}
-        )
+        chunk = DocumentChunk(content=content, index=0, start_char=0, end_char=400, metadata={})
         # Estimation: ~4 characters per token
         assert chunk.token_count == 100
 
     def test_explicit_token_count(self):
         """Explicit token count is used when provided."""
         chunk = DocumentChunk(
-            content="Test",
-            index=0,
-            start_char=0,
-            end_char=4,
-            metadata={},
-            token_count=50
+            content="Test", index=0, start_char=0, end_char=4, metadata={}, token_count=50
         )
         assert chunk.token_count == 50
 
     def test_embedding_default_none(self):
         """Embedding should default to None."""
-        chunk = DocumentChunk(
-            content="Test",
-            index=0,
-            start_char=0,
-            end_char=4,
-            metadata={}
-        )
+        chunk = DocumentChunk(content="Test", index=0, start_char=0, end_char=4, metadata={})
         assert chunk.embedding is None
