@@ -77,15 +77,3 @@ export async function streamChat(
     reader.releaseLock();
   }
 }
-
-/**
- * Check API health
- */
-export async function checkHealth(): Promise<boolean> {
-  try {
-    const response = await fetch(`${API_URL}/chat/health`);
-    return response.ok;
-  } catch {
-    return false;
-  }
-}
