@@ -1,20 +1,28 @@
 """Document serving API endpoints."""
+
+import mimetypes
+from pathlib import Path
+
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
-from pathlib import Path
-import mimetypes
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
-# Documents directory relative to project root
+# Data directory relative to project root
 # From /services/api/app/api/documents.py, need 5 parents to reach project root
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent.parent
-DOCUMENTS_DIR = PROJECT_ROOT / "documents"
+DATA_DIR = PROJECT_ROOT / "data"
+
+# Search paths for documents (raw PDFs and processed scraped content)
+SEARCH_DIRS = [
+    DATA_DIR / "raw",
+    DATA_DIR / "processed",
+]
 
 
 def find_document(filename: str) -> Path | None:
     """
-    Search for a document file recursively in the documents directory.
+    Search for a document file recursively in data directories.
 
     Args:
         filename: The filename to search for
@@ -22,9 +30,17 @@ def find_document(filename: str) -> Path | None:
     Returns:
         The full path if found, None otherwise
     """
-    for path in DOCUMENTS_DIR.rglob(filename):
-        if path.is_file():
-            return path
+    for search_dir in SEARCH_DIRS:
+        if search_dir.exists():
+            for path in search_dir.rglob(filename):
+                # Security: Skip symlinks to prevent traversal attacks
+                if path.is_file() and not path.is_symlink():
+                    # Verify path is still within allowed directory
+                    try:
+                        path.resolve().relative_to(search_dir.resolve())
+                        return path
+                    except ValueError:
+                        continue
     return None
 
 
@@ -39,14 +55,21 @@ async def get_document(file_path: str):
     Returns:
         The document file
     """
-    # Resolve the full path
-    full_path = DOCUMENTS_DIR / file_path
+    # Security: Sanitize input path first
+    file_path = Path(file_path).as_posix()
+    if ".." in file_path or file_path.startswith("/"):
+        raise HTTPException(status_code=400, detail="Invalid path")
 
-    # Security check: ensure path is within documents directory
+    # Resolve the full path - try each search directory
+    full_path = DATA_DIR / file_path
+
+    # Security check: ensure path is within data directory (check BEFORE any operations)
     try:
+        resolved_data_dir = DATA_DIR.resolve()
         full_path = full_path.resolve()
-        if not str(full_path).startswith(str(DOCUMENTS_DIR.resolve())):
-            raise HTTPException(status_code=403, detail="Access denied")
+        full_path.relative_to(resolved_data_dir)  # Raises ValueError if outside
+    except ValueError:
+        raise HTTPException(status_code=403, detail="Access denied")
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid path")
 
@@ -67,10 +90,10 @@ async def get_document(file_path: str):
     mime_type, _ = mimetypes.guess_type(str(full_path))
 
     # Explicitly set PDF mime type for .pdf files
-    if full_path.suffix.lower() == '.pdf':
-        mime_type = 'application/pdf'
+    if full_path.suffix.lower() == ".pdf":
+        mime_type = "application/pdf"
     elif mime_type is None:
-        mime_type = 'application/octet-stream'
+        mime_type = "application/octet-stream"
 
     # Read file and return with inline disposition for browser display
     with open(full_path, "rb") as f:
@@ -79,7 +102,5 @@ async def get_document(file_path: str):
     return Response(
         content=content,
         media_type=mime_type,
-        headers={
-            "Content-Disposition": f'inline; filename="{full_path.name}"'
-        }
+        headers={"Content-Disposition": f'inline; filename="{full_path.name}"'},
     )

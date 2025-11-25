@@ -1,11 +1,14 @@
 """Simplified wrapper that uses the existing RAG agent."""
-from typing import AsyncGenerator, Optional
+
 from collections import defaultdict
+from typing import AsyncGenerator, Optional
 
 from packages.core.agent import (
     agent as rag_agent_instance,
-    initialize_db,
+)
+from packages.core.agent import (
     get_last_sources,
+    initialize_db,
 )
 
 # Session-based message history storage
@@ -23,15 +26,8 @@ def update_message_history(session_id: str, messages: list):
     _message_histories[session_id] = messages
 
 
-def clear_message_history(session_id: str):
-    """Clear message history for a session."""
-    if session_id in _message_histories:
-        del _message_histories[session_id]
-
-
 async def stream_agent_response(
-    message: str,
-    session_id: Optional[str] = None
+    message: str, session_id: Optional[str] = None
 ) -> AsyncGenerator[dict, None]:
     """
     Stream agent responses using the existing RAG agent.
@@ -54,15 +50,11 @@ async def stream_agent_response(
 
         # Run agent with streaming and message history
         async with rag_agent_instance.run_stream(
-            message,
-            message_history=message_history
+            message, message_history=message_history
         ) as result:
             # Stream tokens as they arrive
             async for text in result.stream_text(delta=True):
-                yield {
-                    "type": "token",
-                    "content": text
-                }
+                yield {"type": "token", "content": text}
 
             # Update message history with the new messages
             if session_id:
@@ -71,21 +63,11 @@ async def stream_agent_response(
         # Get sources after streaming completes
         sources = get_last_sources()
         if sources:
-            yield {
-                "type": "sources",
-                "content": "",
-                "sources": sources
-            }
+            yield {"type": "sources", "content": "", "sources": sources}
 
         # Send completion event
-        yield {
-            "type": "done",
-            "content": ""
-        }
+        yield {"type": "done", "content": ""}
 
     except Exception as e:
         # Send error event
-        yield {
-            "type": "error",
-            "content": str(e)
-        }
+        yield {"type": "error", "content": str(e)}

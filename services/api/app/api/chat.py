@@ -1,18 +1,20 @@
 """Chat API endpoints for streaming responses."""
+
+import json
+from typing import AsyncGenerator, Optional
+
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from typing import AsyncGenerator, Optional
-import json
 
 from app.core.rag_wrapper import stream_agent_response
-
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
 
 class ChatRequest(BaseModel):
     """Request model for chat endpoint."""
+
     message: str
     session_id: Optional[str] = None
 
@@ -34,10 +36,7 @@ async def event_stream(message: str, session_id: Optional[str] = None) -> AsyncG
 
         if event_type == "sources":
             # Send sources as JSON with the sources array
-            data = {
-                "content": "",
-                "sources": event.get("sources", [])
-            }
+            data = {"content": "", "sources": event.get("sources", [])}
             yield f"event: {event_type}\n"
             yield f"data: {json.dumps(data)}\n\n"
         else:
@@ -65,7 +64,7 @@ async def chat_stream(request: ChatRequest):
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",  # Disable buffering in nginx
-        }
+        },
     )
 
 
