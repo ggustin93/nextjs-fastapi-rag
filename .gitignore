@@ -58,3 +58,17 @@ htmlcov/
 
 # Archives (reference material, kept locally)
 archives/
+
+# Data directories (raw documents and processed output)
+data/raw/
+data/processed/
+
+# Keep data/examples/ tracked for tutorials
+!data/examples/
+
+# Old documents directory (migrated to data/)
+documents/
+.ruff_cache/
+
+# MCP configuration (contains API keys)
+.mcp.json

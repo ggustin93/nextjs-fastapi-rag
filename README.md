@@ -93,7 +93,15 @@ The schema file (`sql/schema.sql`) creates:
 
 ### 4. Ingest Documents
 
-Add your documents to the `documents/` folder. **Multiple formats supported via Docling**:
+Add your documents to the `data/` directory. **Multiple formats supported via Docling**:
+
+**Directory Structure:**
+```
+data/
+├── raw/pdfs/          # Place PDF documents here
+├── processed/scraped/ # Web scraper output (auto-generated)
+└── examples/          # Tutorial examples
+```
 
 **Supported Formats:**
 - 📄 **PDF** (`.pdf`)
@@ -106,12 +114,14 @@ Add your documents to the `documents/` folder. **Multiple formats supported via 
 - 🎵 **Audio** (`.mp3`) - transcribed with Whisper
 
 ```bash
-# Ingest all supported documents in the documents/ folder
-# NOTE: By default, this CLEARS existing data before ingestion
-uv run python -m packages.ingestion.ingest --documents documents/
+# Ingest PDFs from data/raw/pdfs/
+uv run python -m packages.ingestion.ingest --documents data/raw/pdfs
+
+# Ingest scraped content
+uv run python -m packages.ingestion.ingest --documents data/processed/scraped
 
 # Adjust chunk size (default: 1000)
-uv run python -m packages.ingestion.ingest --documents documents/ --chunk-size 800
+uv run python -m packages.ingestion.ingest --documents data/raw/pdfs --chunk-size 800
 ```
 
 **⚠️ Important:** The ingestion process **automatically deletes all existing documents and chunks** from the database before adding new documents. This ensures a clean state and prevents duplicate data.
