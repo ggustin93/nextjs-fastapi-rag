@@ -14,15 +14,14 @@ Benefits over custom chunking:
 - Battle-tested (maintained by Docling team)
 """
 
-import os
 import logging
-from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
 
-from dotenv import load_dotenv
-from transformers import AutoTokenizer
 from docling.chunking import HybridChunker
 from docling_core.types.doc import DoclingDocument
+from dotenv import load_dotenv
+from transformers import AutoTokenizer
 
 # Load environment variables
 load_dotenv()
@@ -33,6 +32,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ChunkingConfig:
     """Configuration for chunking."""
+
     chunk_size: int = 1000  # Target characters per chunk
     chunk_overlap: int = 200  # Character overlap between chunks
     max_chunk_size: int = 2000  # Maximum chunk size
@@ -52,6 +52,7 @@ class ChunkingConfig:
 @dataclass
 class DocumentChunk:
     """Represents a document chunk with optional embedding."""
+
     content: str
     index: int
     start_char: int
@@ -96,7 +97,7 @@ class DoclingHybridChunker:
         self.chunker = HybridChunker(
             tokenizer=self.tokenizer,
             max_tokens=config.max_tokens,
-            merge_peers=True  # Merge small adjacent chunks
+            merge_peers=True,  # Merge small adjacent chunks
         )
 
         logger.info(f"HybridChunker initialized (max_tokens={config.max_tokens})")
@@ -107,7 +108,7 @@ class DoclingHybridChunker:
         title: str,
         source: str,
         metadata: Optional[Dict[str, Any]] = None,
-        docling_doc: Optional[DoclingDocument] = None
+        docling_doc: Optional[DoclingDocument] = None,
     ) -> List[DocumentChunk]:
         """
         Chunk a document using Docling's HybridChunker.
@@ -129,7 +130,7 @@ class DoclingHybridChunker:
             "title": title,
             "source": source,
             "chunk_method": "hybrid",
-            **(metadata or {})
+            **(metadata or {}),
         }
 
         # If we don't have a DoclingDocument, we need to create one from markdown
@@ -161,21 +162,23 @@ class DoclingHybridChunker:
                     **base_metadata,
                     "total_chunks": len(chunks),
                     "token_count": token_count,
-                    "has_context": True  # Flag indicating contextualized chunk
+                    "has_context": True,  # Flag indicating contextualized chunk
                 }
 
                 # Estimate character positions
                 start_char = current_pos
                 end_char = start_char + len(contextualized_text)
 
-                document_chunks.append(DocumentChunk(
-                    content=contextualized_text.strip(),
-                    index=i,
-                    start_char=start_char,
-                    end_char=end_char,
-                    metadata=chunk_metadata,
-                    token_count=token_count
-                ))
+                document_chunks.append(
+                    DocumentChunk(
+                        content=contextualized_text.strip(),
+                        index=i,
+                        start_char=start_char,
+                        end_char=end_char,
+                        metadata=chunk_metadata,
+                        token_count=token_count,
+                    )
+                )
 
                 current_pos = end_char
 
@@ -187,9 +190,7 @@ class DoclingHybridChunker:
             return self._simple_fallback_chunk(content, base_metadata)
 
     def _simple_fallback_chunk(
-        self,
-        content: str,
-        base_metadata: Dict[str, Any]
+        self, content: str, base_metadata: Dict[str, Any]
     ) -> List[DocumentChunk]:
         """
         Simple fallback chunking when HybridChunker can't be used.
@@ -223,7 +224,7 @@ class DoclingHybridChunker:
                 # Try to end at sentence boundary
                 chunk_end = end
                 for i in range(end, max(start + self.config.min_chunk_size, end - 200), -1):
-                    if i < len(content) and content[i] in '.!?\n':
+                    if i < len(content) and content[i] in ".!?\n":
                         chunk_end = i + 1
                         break
                 chunk_text = content[start:chunk_end]
@@ -232,18 +233,20 @@ class DoclingHybridChunker:
             if chunk_text.strip():
                 token_count = len(self.tokenizer.encode(chunk_text))
 
-                chunks.append(DocumentChunk(
-                    content=chunk_text.strip(),
-                    index=chunk_index,
-                    start_char=start,
-                    end_char=end,
-                    metadata={
-                        **base_metadata,
-                        "chunk_method": "simple_fallback",
-                        "total_chunks": -1  # Will update after
-                    },
-                    token_count=token_count
-                ))
+                chunks.append(
+                    DocumentChunk(
+                        content=chunk_text.strip(),
+                        index=chunk_index,
+                        start_char=start,
+                        end_char=end,
+                        metadata={
+                            **base_metadata,
+                            "chunk_method": "simple_fallback",
+                            "total_chunks": -1,  # Will update after
+                        },
+                        token_count=token_count,
+                    )
+                )
 
                 chunk_index += 1
 
@@ -278,7 +281,7 @@ class SimpleChunker:
         title: str,
         source: str,
         metadata: Optional[Dict[str, Any]] = None,
-        **kwargs  # Ignore extra args like docling_doc
+        **kwargs,  # Ignore extra args like docling_doc
     ) -> List[DocumentChunk]:
         """
         Chunk document using simple paragraph-based rules.
@@ -299,12 +302,13 @@ class SimpleChunker:
             "title": title,
             "source": source,
             "chunk_method": "simple",
-            **(metadata or {})
+            **(metadata or {}),
         }
 
         # Split on double newlines (paragraphs)
         import re
-        paragraphs = re.split(r'\n\s*\n', content)
+
+        paragraphs = re.split(r"\n\s*\n", content)
 
         chunks = []
         current_chunk = ""
@@ -324,13 +328,15 @@ class SimpleChunker:
             else:
                 # Save current chunk if it exists
                 if current_chunk:
-                    chunks.append(self._create_chunk(
-                        current_chunk,
-                        chunk_index,
-                        current_pos,
-                        current_pos + len(current_chunk),
-                        base_metadata.copy()
-                    ))
+                    chunks.append(
+                        self._create_chunk(
+                            current_chunk,
+                            chunk_index,
+                            current_pos,
+                            current_pos + len(current_chunk),
+                            base_metadata.copy(),
+                        )
+                    )
 
                     current_pos += len(current_chunk)
                     chunk_index += 1
@@ -340,13 +346,15 @@ class SimpleChunker:
 
         # Add final chunk
         if current_chunk:
-            chunks.append(self._create_chunk(
-                current_chunk,
-                chunk_index,
-                current_pos,
-                current_pos + len(current_chunk),
-                base_metadata.copy()
-            ))
+            chunks.append(
+                self._create_chunk(
+                    current_chunk,
+                    chunk_index,
+                    current_pos,
+                    current_pos + len(current_chunk),
+                    base_metadata.copy(),
+                )
+            )
 
         # Update total chunks in metadata
         for chunk in chunks:
@@ -355,12 +363,7 @@ class SimpleChunker:
         return chunks
 
     def _create_chunk(
-        self,
-        content: str,
-        index: int,
-        start_pos: int,
-        end_pos: int,
-        metadata: Dict[str, Any]
+        self, content: str, index: int, start_pos: int, end_pos: int, metadata: Dict[str, Any]
     ) -> DocumentChunk:
         """Create a DocumentChunk object."""
         return DocumentChunk(
@@ -368,7 +371,7 @@ class SimpleChunker:
             index=index,
             start_char=start_pos,
             end_char=end_pos,
-            metadata=metadata
+            metadata=metadata,
         )
 
 

@@ -1,34 +1,33 @@
 """
-Main ingestion script for processing markdown documents into vector DB and knowledge graph.
+Main ingestion script for processing documents into vector DB.
 """
 
-import os
-import asyncio
-import logging
-import json
-import glob
-from pathlib import Path
-from typing import List, Dict, Any, Optional
-from datetime import datetime
 import argparse
+import asyncio
+import glob
+import json
+import logging
+import os
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 
-import asyncpg
 from dotenv import load_dotenv
 
-from .chunker import ChunkingConfig, create_chunker, DocumentChunk
+from .chunker import ChunkingConfig, DocumentChunk, create_chunker
 from .embedder import create_embedder
 
 # Import utilities
 try:
-    from ..utils.db_utils import initialize_database, close_database, db_pool
+    from ..utils.db_utils import close_database, db_pool, initialize_database
     from ..utils.models import IngestionConfig, IngestionResult
     from ..utils.supabase_client import SupabaseRestClient
 except ImportError:
     # For direct execution or testing
-    import sys
     import os
+    import sys
+
     sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    from packages.utils.db_utils import initialize_database, close_database, db_pool
+    from packages.utils.db_utils import close_database, db_pool, initialize_database
     from packages.utils.models import IngestionConfig, IngestionResult
     from packages.utils.supabase_client import SupabaseRestClient
 
@@ -39,14 +38,14 @@ logger = logging.getLogger(__name__)
 
 
 class DocumentIngestionPipeline:
-    """Pipeline for ingesting documents into vector DB and knowledge graph."""
-    
+    """Pipeline for ingesting documents into vector DB."""
+
     def __init__(
         self,
         config: IngestionConfig,
         documents_folder: str = "documents",
         clean_before_ingest: bool = True,
-        use_rest_api: bool = True
+        use_rest_api: bool = True,
     ):
         """
         Initialize ingestion pipeline.
@@ -58,7 +57,14 @@ class DocumentIngestionPipeline:
             use_rest_api: Whether to use REST API instead of direct PostgreSQL connection (default: True)
         """
         self.config = config
-        self.documents_folder = documents_folder
+
+        # Security: Validate and normalize documents_folder path
+        normalized_path = os.path.abspath(os.path.normpath(documents_folder))
+        project_root = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+        if not normalized_path.startswith(project_root):
+            raise ValueError(f"Documents folder must be within project directory: {project_root}")
+        self.documents_folder = normalized_path
+
         self.clean_before_ingest = clean_before_ingest
         self.use_rest_api = use_rest_api
 
@@ -67,7 +73,7 @@ class DocumentIngestionPipeline:
             chunk_size=config.chunk_size,
             chunk_overlap=config.chunk_overlap,
             max_chunk_size=config.max_chunk_size,
-            use_semantic_splitting=config.use_semantic_chunking
+            use_semantic_splitting=config.use_semantic_chunking,
         )
 
         self.chunker = create_chunker(self.chunker_config)
@@ -77,7 +83,7 @@ class DocumentIngestionPipeline:
         self.rest_client = SupabaseRestClient() if use_rest_api else None
 
         self._initialized = False
-    
+
     async def initialize(self):
         """Initialize database connections."""
         if self._initialized:
@@ -105,27 +111,26 @@ class DocumentIngestionPipeline:
             else:
                 await close_database()
             self._initialized = False
-    
+
     async def ingest_documents(
-        self,
-        progress_callback: Optional[callable] = None
+        self, progress_callback: Optional[callable] = None
     ) -> List[IngestionResult]:
         """
         Ingest all documents from the documents folder.
-        
+
         Args:
             progress_callback: Optional callback for progress updates
-        
+
         Returns:
             List of ingestion results
         """
         if not self._initialized:
             await self.initialize()
-        
+
         # Clean existing data if requested
         if self.clean_before_ingest:
             await self._clean_databases()
-        
+
         # Find all supported document files
         document_files = self._find_document_files()
 
@@ -139,34 +144,36 @@ class DocumentIngestionPipeline:
 
         for i, file_path in enumerate(document_files):
             try:
-                logger.info(f"Processing file {i+1}/{len(document_files)}: {file_path}")
+                logger.info(f"Processing file {i + 1}/{len(document_files)}: {file_path}")
 
                 result = await self._ingest_single_document(file_path)
                 results.append(result)
 
                 if progress_callback:
                     progress_callback(i + 1, len(document_files))
-                
+
             except Exception as e:
                 logger.error(f"Failed to process {file_path}: {e}")
-                results.append(IngestionResult(
-                    document_id="",
-                    title=os.path.basename(file_path),
-                    chunks_created=0,
-                    entities_extracted=0,
-                    relationships_created=0,
-                    processing_time_ms=0,
-                    errors=[str(e)]
-                ))
-        
+                results.append(
+                    IngestionResult(
+                        document_id="",
+                        title=os.path.basename(file_path),
+                        chunks_created=0,
+                        processing_time_ms=0,
+                        errors=[str(e)],
+                    )
+                )
+
         # Log summary
         total_chunks = sum(r.chunks_created for r in results)
         total_errors = sum(len(r.errors) for r in results)
-        
-        logger.info(f"Ingestion complete: {len(results)} documents, {total_chunks} chunks, {total_errors} errors")
-        
+
+        logger.info(
+            f"Ingestion complete: {len(results)} documents, {total_chunks} chunks, {total_errors} errors"
+        )
+
         return results
-    
+
     async def _ingest_single_document(self, file_path: str) -> IngestionResult:
         """
         Ingest a single document.
@@ -195,58 +202,42 @@ class DocumentIngestionPipeline:
             title=document_title,
             source=document_source,
             metadata=document_metadata,
-            docling_doc=docling_doc  # Pass DoclingDocument for HybridChunker
+            docling_doc=docling_doc,  # Pass DoclingDocument for HybridChunker
         )
-        
+
         if not chunks:
             logger.warning(f"No chunks created for {document_title}")
             return IngestionResult(
                 document_id="",
                 title=document_title,
                 chunks_created=0,
-                entities_extracted=0,
-                relationships_created=0,
                 processing_time_ms=(datetime.now() - start_time).total_seconds() * 1000,
-                errors=["No chunks created"]
+                errors=["No chunks created"],
             )
-        
+
         logger.info(f"Created {len(chunks)} chunks")
-        
-        # Entity extraction removed (graph-related functionality)
-        entities_extracted = 0
-        
+
         # Generate embeddings
         embedded_chunks = await self.embedder.embed_chunks(chunks)
         logger.info(f"Generated embeddings for {len(embedded_chunks)} chunks")
-        
+
         # Save to PostgreSQL
         document_id = await self._save_to_postgres(
-            document_title,
-            document_source,
-            document_content,
-            embedded_chunks,
-            document_metadata
+            document_title, document_source, document_content, embedded_chunks, document_metadata
         )
-        
+
         logger.info(f"Saved document to PostgreSQL with ID: {document_id}")
-        
-        # Knowledge graph functionality removed
-        relationships_created = 0
-        graph_errors = []
-        
+
         # Calculate processing time
         processing_time = (datetime.now() - start_time).total_seconds() * 1000
-        
+
         return IngestionResult(
             document_id=document_id,
             title=document_title,
             chunks_created=len(chunks),
-            entities_extracted=entities_extracted,
-            relationships_created=relationships_created,
             processing_time_ms=processing_time,
-            errors=graph_errors
         )
-    
+
     def _find_document_files(self) -> List[str]:
         """Find all supported document files in the documents folder."""
         if not os.path.exists(self.documents_folder):
@@ -255,21 +246,32 @@ class DocumentIngestionPipeline:
 
         # Supported file patterns - Docling + text formats + audio
         patterns = [
-            "*.md", "*.markdown", "*.txt",  # Text formats
+            "*.md",
+            "*.markdown",
+            "*.txt",  # Text formats
             "*.pdf",  # PDF
-            "*.docx", "*.doc",  # Word
-            "*.pptx", "*.ppt",  # PowerPoint
-            "*.xlsx", "*.xls",  # Excel
-            "*.html", "*.htm",  # HTML
-            "*.mp3", "*.wav", "*.m4a", "*.flac",  # Audio formats
+            "*.docx",
+            "*.doc",  # Word
+            "*.pptx",
+            "*.ppt",  # PowerPoint
+            "*.xlsx",
+            "*.xls",  # Excel
+            "*.html",
+            "*.htm",  # HTML
+            "*.mp3",
+            "*.wav",
+            "*.m4a",
+            "*.flac",  # Audio formats
         ]
         files = []
 
         for pattern in patterns:
-            files.extend(glob.glob(os.path.join(self.documents_folder, "**", pattern), recursive=True))
+            files.extend(
+                glob.glob(os.path.join(self.documents_folder, "**", pattern), recursive=True)
+            )
 
         return sorted(files)
-    
+
     def _read_document(self, file_path: str) -> tuple[str, Optional[Any]]:
         """
         Read document content from file - supports multiple formats via Docling.
@@ -281,19 +283,31 @@ class DocumentIngestionPipeline:
         file_ext = os.path.splitext(file_path)[1].lower()
 
         # Audio formats - transcribe with Whisper ASR
-        audio_formats = ['.mp3', '.wav', '.m4a', '.flac']
+        audio_formats = [".mp3", ".wav", ".m4a", ".flac"]
         if file_ext in audio_formats:
             content = self._transcribe_audio(file_path)
             return (content, None)  # No DoclingDocument for audio
 
         # Docling-supported formats (convert to markdown)
-        docling_formats = ['.pdf', '.docx', '.doc', '.pptx', '.ppt', '.xlsx', '.xls', '.html', '.htm']
+        docling_formats = [
+            ".pdf",
+            ".docx",
+            ".doc",
+            ".pptx",
+            ".ppt",
+            ".xlsx",
+            ".xls",
+            ".html",
+            ".htm",
+        ]
 
         if file_ext in docling_formats:
             try:
                 from docling.document_converter import DocumentConverter
 
-                logger.info(f"Converting {file_ext} file using Docling: {os.path.basename(file_path)}")
+                logger.info(
+                    f"Converting {file_ext} file using Docling: {os.path.basename(file_path)}"
+                )
 
                 converter = DocumentConverter()
                 result = converter.convert(file_path)
@@ -310,29 +324,31 @@ class DocumentIngestionPipeline:
                 # Fall back to raw text if Docling fails
                 logger.warning(f"Falling back to raw text extraction for {file_path}")
                 try:
-                    with open(file_path, 'r', encoding='utf-8') as f:
+                    with open(file_path, "r", encoding="utf-8") as f:
                         return (f.read(), None)
-                except:
-                    return (f"[Error: Could not read file {os.path.basename(file_path)}]", None)
+                except (IOError, OSError, UnicodeDecodeError) as e:
+                    logger.error(f"Failed to read file {file_path}: {e}")
+                    raise RuntimeError(f"Could not read file {os.path.basename(file_path)}: {e}")
 
         # Text-based formats (read directly)
         else:
             try:
-                with open(file_path, 'r', encoding='utf-8') as f:
+                with open(file_path, "r", encoding="utf-8") as f:
                     return (f.read(), None)
             except UnicodeDecodeError:
                 # Try with different encoding
-                with open(file_path, 'r', encoding='latin-1') as f:
+                with open(file_path, "r", encoding="latin-1") as f:
                     return (f.read(), None)
 
     def _transcribe_audio(self, file_path: str) -> str:
         """Transcribe audio file using Whisper ASR via Docling."""
         try:
             from pathlib import Path
-            from docling.document_converter import DocumentConverter, AudioFormatOption
-            from docling.datamodel.pipeline_options import AsrPipelineOptions
+
             from docling.datamodel import asr_model_specs
             from docling.datamodel.base_models import InputFormat
+            from docling.datamodel.pipeline_options import AsrPipelineOptions
+            from docling.document_converter import AudioFormatOption, DocumentConverter
             from docling.pipeline.asr_pipeline import AsrPipeline
 
             # Use Path object - Docling expects this
@@ -372,28 +388,29 @@ class DocumentIngestionPipeline:
     def _extract_title(self, content: str, file_path: str) -> str:
         """Extract title from document content or filename."""
         # Try to find markdown title
-        lines = content.split('\n')
+        lines = content.split("\n")
         for line in lines[:10]:  # Check first 10 lines
             line = line.strip()
-            if line.startswith('# '):
+            if line.startswith("# "):
                 return line[2:].strip()
-        
+
         # Fallback to filename
         return os.path.splitext(os.path.basename(file_path))[0]
-    
+
     def _extract_document_metadata(self, content: str, file_path: str) -> Dict[str, Any]:
         """Extract metadata from document content."""
         metadata = {
             "file_path": file_path,
             "file_size": len(content),
-            "ingestion_date": datetime.now().isoformat()
+            "ingestion_date": datetime.now().isoformat(),
         }
-        
+
         # Try to extract YAML frontmatter
-        if content.startswith('---'):
+        if content.startswith("---"):
             try:
                 import yaml
-                end_marker = content.find('\n---\n', 4)
+
+                end_marker = content.find("\n---\n", 4)
                 if end_marker != -1:
                     frontmatter = content[4:end_marker]
                     yaml_metadata = yaml.safe_load(frontmatter)
@@ -403,42 +420,39 @@ class DocumentIngestionPipeline:
                 logger.warning("PyYAML not installed, skipping frontmatter extraction")
             except Exception as e:
                 logger.warning(f"Failed to parse frontmatter: {e}")
-        
+
         # Extract some basic metadata from content
-        lines = content.split('\n')
-        metadata['line_count'] = len(lines)
-        metadata['word_count'] = len(content.split())
-        
+        lines = content.split("\n")
+        metadata["line_count"] = len(lines)
+        metadata["word_count"] = len(content.split())
+
         return metadata
-    
+
     async def _save_to_postgres(
         self,
         title: str,
         source: str,
         content: str,
         chunks: List[DocumentChunk],
-        metadata: Dict[str, Any]
+        metadata: Dict[str, Any],
     ) -> str:
         """Save document and chunks to PostgreSQL or via REST API."""
         if self.use_rest_api and self.rest_client:
             # Use REST API
             document_id = await self.rest_client.insert_document(
-                title=title,
-                source=source,
-                content=content,
-                metadata=metadata
+                title=title, source=source, content=content, metadata=metadata
             )
 
             # Insert chunks via REST API
             for i, chunk in enumerate(chunks):
-                if hasattr(chunk, 'embedding') and chunk.embedding:
+                if hasattr(chunk, "embedding") and chunk.embedding:
                     await self.rest_client.insert_chunk(
                         document_id=document_id,
                         content=chunk.content,
                         embedding=chunk.embedding,
                         chunk_index=i,
                         metadata=chunk.metadata or {},
-                        token_count=chunk.token_count
+                        token_count=chunk.token_count,
                     )
 
             return document_id
@@ -456,7 +470,7 @@ class DocumentIngestionPipeline:
                         title,
                         source,
                         content,
-                        json.dumps(metadata)
+                        json.dumps(metadata),
                     )
 
                     document_id = document_result["id"]
@@ -465,9 +479,9 @@ class DocumentIngestionPipeline:
                     for chunk in chunks:
                         # Convert embedding to PostgreSQL vector string format
                         embedding_data = None
-                        if hasattr(chunk, 'embedding') and chunk.embedding:
+                        if hasattr(chunk, "embedding") and chunk.embedding:
                             # PostgreSQL vector format: '[1.0,2.0,3.0]' (no spaces after commas)
-                            embedding_data = '[' + ','.join(map(str, chunk.embedding)) + ']'
+                            embedding_data = "[" + ",".join(map(str, chunk.embedding)) + "]"
 
                         await conn.execute(
                             """
@@ -479,11 +493,11 @@ class DocumentIngestionPipeline:
                             embedding_data,
                             chunk.index,
                             json.dumps(chunk.metadata),
-                            chunk.token_count
+                            chunk.token_count,
                         )
 
                     return document_id
-    
+
     async def _clean_databases(self):
         """Clean existing data from databases."""
         logger.warning("Cleaning existing data from databases...")
@@ -499,12 +513,19 @@ class DocumentIngestionPipeline:
                     await conn.execute("DELETE FROM documents")
             logger.info("Cleaned PostgreSQL database")
 
+
 async def main():
     """Main function for running ingestion."""
     parser = argparse.ArgumentParser(description="Ingest documents into vector DB")
     parser.add_argument("--documents", "-d", default="documents", help="Documents folder path")
-    parser.add_argument("--no-clean", action="store_true", help="Skip cleaning existing data before ingestion (default: cleans automatically)")
-    parser.add_argument("--chunk-size", type=int, default=1000, help="Chunk size for splitting documents")
+    parser.add_argument(
+        "--no-clean",
+        action="store_true",
+        help="Skip cleaning existing data before ingestion (default: cleans automatically)",
+    )
+    parser.add_argument(
+        "--chunk-size", type=int, default=1000, help="Chunk size for splitting documents"
+    )
     parser.add_argument("--chunk-overlap", type=int, default=200, help="Chunk overlap size")
     parser.add_argument("--no-semantic", action="store_true", help="Disable semantic chunking")
     # Graph-related arguments removed
@@ -515,55 +536,54 @@ async def main():
     # Configure logging
     log_level = logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(
-        level=log_level,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        level=log_level, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
 
     # Create ingestion configuration
     config = IngestionConfig(
         chunk_size=args.chunk_size,
         chunk_overlap=args.chunk_overlap,
-        use_semantic_chunking=not args.no_semantic
+        use_semantic_chunking=not args.no_semantic,
     )
 
     # Create and run pipeline - clean by default unless --no-clean is specified
     pipeline = DocumentIngestionPipeline(
         config=config,
         documents_folder=args.documents,
-        clean_before_ingest=not args.no_clean  # Clean by default
+        clean_before_ingest=not args.no_clean,  # Clean by default
     )
-    
+
     def progress_callback(current: int, total: int):
         print(f"Progress: {current}/{total} documents processed")
-    
+
     try:
         start_time = datetime.now()
-        
+
         results = await pipeline.ingest_documents(progress_callback)
-        
+
         end_time = datetime.now()
         total_time = (end_time - start_time).total_seconds()
-        
+
         # Print summary
-        print("\n" + "="*50)
+        print("\n" + "=" * 50)
         print("INGESTION SUMMARY")
-        print("="*50)
+        print("=" * 50)
         print(f"Documents processed: {len(results)}")
         print(f"Total chunks created: {sum(r.chunks_created for r in results)}")
         # Graph-related stats removed
         print(f"Total errors: {sum(len(r.errors) for r in results)}")
         print(f"Total processing time: {total_time:.2f} seconds")
         print()
-        
+
         # Print individual results
         for result in results:
             status = "✓" if not result.errors else "✗"
             print(f"{status} {result.title}: {result.chunks_created} chunks")
-            
+
             if result.errors:
                 for error in result.errors:
                     print(f"  Error: {error}")
-        
+
     except KeyboardInterrupt:
         print("\nIngestion interrupted by user")
     except Exception as e:
