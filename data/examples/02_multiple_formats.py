@@ -18,8 +18,10 @@ Usage:
     python 02_multiple_formats.py
 """
 
-from docling.document_converter import DocumentConverter
 from pathlib import Path
+
+from docling.document_converter import DocumentConverter
+
 
 def process_document(file_path: str, converter: DocumentConverter) -> dict:
     """Process a single document and return metadata."""
@@ -34,21 +36,21 @@ def process_document(file_path: str, converter: DocumentConverter) -> dict:
 
         # Get document info
         doc_info = {
-            'file': Path(file_path).name,
-            'format': Path(file_path).suffix,
-            'status': 'Success',
-            'markdown_length': len(markdown),
-            'preview': markdown[:200].replace('\n', ' ')
+            "file": Path(file_path).name,
+            "format": Path(file_path).suffix,
+            "status": "Success",
+            "markdown_length": len(markdown),
+            "preview": markdown[:200].replace("\n", " "),
         }
 
         # Save output
         output_file = f"output/output_{Path(file_path).stem}.md"
-        with open(output_file, 'w', encoding='utf-8') as f:
+        with open(output_file, "w", encoding="utf-8") as f:
             f.write(markdown)
 
-        doc_info['output_file'] = output_file
+        doc_info["output_file"] = output_file
 
-        print(f"   ✓ Converted successfully")
+        print("   ✓ Converted successfully")
         print(f"   ✓ Output: {output_file}")
 
         return doc_info
@@ -56,11 +58,12 @@ def process_document(file_path: str, converter: DocumentConverter) -> dict:
     except Exception as e:
         print(f"   ✗ Error: {e}")
         return {
-            'file': Path(file_path).name,
-            'format': Path(file_path).suffix,
-            'status': 'Failed',
-            'error': str(e)
+            "file": Path(file_path).name,
+            "format": Path(file_path).suffix,
+            "status": "Failed",
+            "error": str(e),
         }
+
 
 def main():
     print("=" * 60)
@@ -90,17 +93,18 @@ def main():
     print("=" * 60)
 
     for result in results:
-        status_icon = "✓" if result['status'] == 'Success' else "✗"
+        status_icon = "✓" if result["status"] == "Success" else "✗"
         print(f"{status_icon} {result['file']} ({result['format']})")
-        if result['status'] == 'Success':
+        if result["status"] == "Success":
             print(f"   Length: {result['markdown_length']} chars")
             print(f"   Preview: {result['preview']}...")
         else:
             print(f"   Error: {result.get('error', 'Unknown')}")
         print()
 
-    success_count = sum(1 for r in results if r['status'] == 'Success')
+    success_count = sum(1 for r in results if r["status"] == "Success")
     print(f"Converted {success_count}/{len(results)} documents successfully")
+
 
 if __name__ == "__main__":
     main()

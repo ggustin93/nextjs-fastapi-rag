@@ -22,10 +22,12 @@ Usage:
     python 04_hybrid_chunking.py
 """
 
-from docling.document_converter import DocumentConverter
-from docling.chunking import HybridChunker
-from transformers import AutoTokenizer
 from pathlib import Path
+
+from docling.chunking import HybridChunker
+from docling.document_converter import DocumentConverter
+from transformers import AutoTokenizer
+
 
 def chunk_document(file_path: str, max_tokens: int = 512):
     """Convert and chunk document using HybridChunker."""
@@ -48,7 +50,7 @@ def chunk_document(file_path: str, max_tokens: int = 512):
     chunker = HybridChunker(
         tokenizer=tokenizer,
         max_tokens=max_tokens,
-        merge_peers=True  # Merge small adjacent chunks
+        merge_peers=True,  # Merge small adjacent chunks
     )
 
     # Step 4: Generate chunks
@@ -57,6 +59,7 @@ def chunk_document(file_path: str, max_tokens: int = 512):
     chunks = list(chunk_iter)
 
     return chunks, tokenizer, chunker
+
 
 def analyze_chunks(chunks, tokenizer):
     """Analyze and display chunk statistics."""
@@ -85,7 +88,7 @@ def analyze_chunks(chunks, tokenizer):
             print(f"Preview: {text[:150]}...")
 
             # Show metadata if available
-            if hasattr(chunk, 'meta') and chunk.meta:
+            if hasattr(chunk, "meta") and chunk.meta:
                 print(f"Metadata: {chunk.meta}")
 
     # Summary statistics
@@ -99,20 +102,21 @@ def analyze_chunks(chunks, tokenizer):
     print(f"Max tokens: {max(chunk_sizes)}")
 
     # Token distribution
-    print(f"\nToken distribution:")
+    print("\nToken distribution:")
     ranges = [(0, 128), (128, 256), (256, 384), (384, 512)]
     for start, end in ranges:
         count = sum(1 for size in chunk_sizes if start <= size < end)
         print(f"  {start}-{end} tokens: {count} chunks")
 
+
 def save_chunks(chunks, chunker, output_path: str):
     """Save chunks to file with separators, preserving context and headings."""
 
-    with open(output_path, 'w', encoding='utf-8') as f:
+    with open(output_path, "w", encoding="utf-8") as f:
         for i, chunk in enumerate(chunks):
-            f.write(f"{'='*60}\n")
+            f.write(f"{'=' * 60}\n")
             f.write(f"CHUNK {i}\n")
-            f.write(f"{'='*60}\n")
+            f.write(f"{'=' * 60}\n")
 
             # Use contextualize to preserve headings and metadata
             contextualized_text = chunker.contextualize(chunk=chunk)
@@ -121,6 +125,7 @@ def save_chunks(chunks, chunker, output_path: str):
 
     print(f"\n✓ Chunks saved to: {output_path}")
     print("   (with preserved headings and document context)")
+
 
 def main():
     print("=" * 60)
@@ -157,7 +162,9 @@ def main():
     except Exception as e:
         print(f"\n✗ Error: {e}")
         import traceback
+
         traceback.print_exc()
+
 
 if __name__ == "__main__":
     main()

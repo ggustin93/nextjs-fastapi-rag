@@ -17,6 +17,7 @@ Usage:
 
 from docling.document_converter import DocumentConverter
 
+
 def main():
     # Path to PDF document
     pdf_path = "../documents/technical-architecture-guide.pdf"
@@ -45,11 +46,12 @@ def main():
 
     # Save to file
     output_path = "output/output_simple.md"
-    with open(output_path, 'w', encoding='utf-8') as f:
+    with open(output_path, "w", encoding="utf-8") as f:
         f.write(markdown)
 
     print(f"\n✓ Full markdown saved to: {output_path}")
     print(f"✓ Total length: {len(markdown)} characters")
+
 
 if __name__ == "__main__":
     main()
