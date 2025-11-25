@@ -10,7 +10,7 @@ import sys
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "services", "api"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "services", "api"))
 from app.main import app
 
 
