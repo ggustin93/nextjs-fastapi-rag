@@ -3,13 +3,12 @@ Supabase REST API client for database operations.
 Uses Supabase Python SDK (HTTPS) to work around network restrictions.
 """
 
-import os
 import logging
-from typing import List, Dict, Any, Optional
-from uuid import UUID
+import os
+from typing import Any, Dict, List
 
-from supabase import create_client, Client
 from dotenv import load_dotenv
+from supabase import Client, create_client
 
 # Load environment variables
 load_dotenv()
@@ -48,11 +47,15 @@ class SupabaseRestClient:
         """Clean database by deleting all documents and chunks."""
         try:
             # Delete all chunks first (foreign key constraint)
-            self.client.table("chunks").delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
+            self.client.table("chunks").delete().neq(
+                "id", "00000000-0000-0000-0000-000000000000"
+            ).execute()
             logger.info("Deleted all chunks")
 
             # Delete all documents
-            self.client.table("documents").delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
+            self.client.table("documents").delete().neq(
+                "id", "00000000-0000-0000-0000-000000000000"
+            ).execute()
             logger.info("Deleted all documents")
 
         except Exception as e:
@@ -60,11 +63,7 @@ class SupabaseRestClient:
             raise
 
     async def insert_document(
-        self,
-        title: str,
-        source: str,
-        content: str,
-        metadata: Dict[str, Any]
+        self, title: str, source: str, content: str, metadata: Dict[str, Any]
     ) -> str:
         """
         Insert document via Supabase REST API.
@@ -79,12 +78,13 @@ class SupabaseRestClient:
             Document UUID as string
         """
         try:
-            response = self.client.table("documents").insert({
-                "title": title,
-                "source": source,
-                "content": content,
-                "metadata": metadata
-            }).execute()
+            response = (
+                self.client.table("documents")
+                .insert(
+                    {"title": title, "source": source, "content": content, "metadata": metadata}
+                )
+                .execute()
+            )
 
             document_id = response.data[0]["id"]
             logger.debug(f"Inserted document: {title} ({document_id})")
@@ -101,7 +101,7 @@ class SupabaseRestClient:
         embedding: List[float],
         chunk_index: int,
         metadata: Dict[str, Any],
-        token_count: int
+        token_count: int,
     ):
         """
         Insert chunk via Supabase REST API.
@@ -116,16 +116,18 @@ class SupabaseRestClient:
         """
         try:
             # PostgreSQL vector format for Supabase
-            embedding_str = '[' + ','.join(map(str, embedding)) + ']'
+            embedding_str = "[" + ",".join(map(str, embedding)) + "]"
 
-            self.client.table("chunks").insert({
-                "document_id": document_id,
-                "content": content,
-                "embedding": embedding_str,
-                "chunk_index": chunk_index,
-                "metadata": metadata,
-                "token_count": token_count
-            }).execute()
+            self.client.table("chunks").insert(
+                {
+                    "document_id": document_id,
+                    "content": content,
+                    "embedding": embedding_str,
+                    "chunk_index": chunk_index,
+                    "metadata": metadata,
+                    "token_count": token_count,
+                }
+            ).execute()
 
             logger.debug(f"Inserted chunk {chunk_index} for document {document_id}")
 
@@ -133,10 +135,7 @@ class SupabaseRestClient:
             logger.error(f"Error inserting chunk {chunk_index}: {e}")
             raise
 
-    async def insert_chunks_batch(
-        self,
-        chunks_data: List[Dict[str, Any]]
-    ):
+    async def insert_chunks_batch(self, chunks_data: List[Dict[str, Any]]):
         """
         Insert multiple chunks in a single request for better performance.
 
@@ -147,7 +146,7 @@ class SupabaseRestClient:
             # Convert embeddings to PostgreSQL vector format
             for chunk in chunks_data:
                 if isinstance(chunk.get("embedding"), list):
-                    chunk["embedding"] = '[' + ','.join(map(str, chunk["embedding"])) + ']'
+                    chunk["embedding"] = "[" + ",".join(map(str, chunk["embedding"])) + "]"
 
             self.client.table("chunks").insert(chunks_data).execute()
             logger.info(f"Inserted batch of {len(chunks_data)} chunks")
@@ -157,9 +156,7 @@ class SupabaseRestClient:
             raise
 
     async def similarity_search(
-        self,
-        query_embedding: List[float],
-        limit: int = 10
+        self, query_embedding: List[float], limit: int = 10
     ) -> List[Dict[str, Any]]:
         """
         Vector similarity search via Supabase RPC function.
@@ -174,14 +171,10 @@ class SupabaseRestClient:
         """
         try:
             # PostgreSQL vector format
-            embedding_str = '[' + ','.join(map(str, query_embedding)) + ']'
+            embedding_str = "[" + ",".join(map(str, query_embedding)) + "]"
 
             response = self.client.rpc(
-                "match_chunks",
-                {
-                    "query_embedding": embedding_str,
-                    "match_count": limit
-                }
+                "match_chunks", {"query_embedding": embedding_str, "match_count": limit}
             ).execute()
 
             return response.data
