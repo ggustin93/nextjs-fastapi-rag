@@ -1,0 +1,157 @@
+version: '3.8'
+
+services:
+  # ====================================
+  # Backend API Service
+  # ====================================
+  backend:
+    build:
+      context: .
+      dockerfile: deploy/backend.Dockerfile
+    container_name: osiris_backend
+    ports:
+      - "8000:8000"
+    environment:
+      # Database
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY}
+      # AI/LLM
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      LLM_CHOICE: ${LLM_CHOICE:-gpt-4o-mini}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-3-small}
+      # Server
+      HOST: 0.0.0.0
+      PORT: 8000
+      CORS_ALLOWED_ORIGINS: http://localhost:3000,http://frontend:3000
+      # Logging
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      # Document Processing
+      DOCUMENTS_PATH: /app/documents
+      MAX_CHUNK_SIZE: ${MAX_CHUNK_SIZE:-1000}
+      CHUNK_OVERLAP: ${CHUNK_OVERLAP:-200}
+    volumes:
+      - ./documents:/app/documents:ro
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - osiris-network
+
+  # ====================================
+  # Frontend Web Service
+  # ====================================
+  frontend:
+    build:
+      context: ./services/web
+      dockerfile: ../../deploy/frontend.Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    container_name: osiris_frontend
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      NEXT_PUBLIC_API_VERSION: ${NEXT_PUBLIC_API_VERSION:-v1}
+      NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME:-Osiris MultiRAG Agent}
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/health', (r) => {r.statusCode === 200 ? process.exit(0) : process.exit(1)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - osiris-network
+
+  # ====================================
+  # Nginx Reverse Proxy (Optional)
+  # ====================================
+  nginx:
+    image: nginx:alpine
+    container_name: osiris_nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./deploy/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - backend
+      - frontend
+    profiles:
+      - production
+    restart: unless-stopped
+    networks:
+      - osiris-network
+
+  # ====================================
+  # Redis Cache (Optional)
+  # ====================================
+  redis:
+    image: redis:7-alpine
+    container_name: osiris_redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    profiles:
+      - cache
+    restart: unless-stopped
+    networks:
+      - osiris-network
+
+  # ====================================
+  # Document Ingestion Service (On-Demand)
+  # ====================================
+  ingestion:
+    build:
+      context: .
+      dockerfile: deploy/backend.Dockerfile
+    container_name: osiris_ingestion
+    environment:
+      # Database
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY}
+      # AI/LLM
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      LLM_CHOICE: ${LLM_CHOICE:-gpt-4o-mini}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-3-small}
+      # Logging
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - ./documents:/app/documents:ro
+      - ./logs:/app/logs
+    command: ["python", "-m", "packages.ingestion.ingest", "--path", "/app/documents/active"]
+    profiles:
+      - ingestion
+    networks:
+      - osiris-network
+
+# ====================================
+# Networks
+# ====================================
+networks:
+  osiris-network:
+    driver: bridge
+
+# ====================================
+# Volumes
+# ====================================
+volumes:
+  redis_data:
+    driver: local
