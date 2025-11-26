@@ -12,6 +12,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
+from pydantic import BaseModel, Field, field_validator
 
 from .chunker import ChunkingConfig, DocumentChunk, create_chunker
 from .embedder import create_embedder
@@ -19,7 +20,6 @@ from .embedder import create_embedder
 # Import utilities
 try:
     from ..utils.db_utils import close_database, db_pool, initialize_database
-    from ..utils.models import IngestionConfig, IngestionResult
     from ..utils.supabase_client import SupabaseRestClient
 except ImportError:
     # For direct execution or testing
@@ -28,13 +28,40 @@ except ImportError:
 
     sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     from packages.utils.db_utils import close_database, db_pool, initialize_database
-    from packages.utils.models import IngestionConfig, IngestionResult
     from packages.utils.supabase_client import SupabaseRestClient
 
 # Load environment variables
 load_dotenv()
 
 logger = logging.getLogger(__name__)
+
+
+class IngestionConfig(BaseModel):
+    """Configuration for document ingestion."""
+
+    chunk_size: int = Field(default=1000, ge=100, le=5000)
+    chunk_overlap: int = Field(default=200, ge=0, le=1000)
+    max_chunk_size: int = Field(default=2000, ge=500, le=10000)
+    use_semantic_chunking: bool = True
+
+    @field_validator("chunk_overlap")
+    @classmethod
+    def validate_overlap(cls, v: int, info) -> int:
+        """Ensure overlap is less than chunk size."""
+        chunk_size = info.data.get("chunk_size", 1000)
+        if v >= chunk_size:
+            raise ValueError(f"Chunk overlap ({v}) must be less than chunk size ({chunk_size})")
+        return v
+
+
+class IngestionResult(BaseModel):
+    """Result of document ingestion."""
+
+    document_id: str
+    title: str
+    chunks_created: int
+    processing_time_ms: float
+    errors: List[str] = Field(default_factory=list)
 
 
 class DocumentIngestionPipeline:
@@ -269,6 +296,9 @@ class DocumentIngestionPipeline:
             files.extend(
                 glob.glob(os.path.join(self.documents_folder, "**", pattern), recursive=True)
             )
+
+        # Filter out examples/ and web/ directories (not documents to ingest)
+        files = [f for f in files if "/examples/" not in f and "/web/" not in f]
 
         return sorted(files)
 

@@ -1,5 +1,8 @@
 """
 Document embedding generation for vector search.
+
+Supports OpenAI, Chutes.ai, Ollama, and any OpenAI-compatible API
+via centralized configuration in packages.config.
 """
 
 import asyncio
@@ -13,25 +16,35 @@ from openai import APIError, RateLimitError
 
 from .chunker import DocumentChunk
 
-# Import flexible providers
+# Import flexible providers and settings
 try:
     from ..utils.providers import get_embedding_client, get_embedding_model
+    from packages.config import settings
 except ImportError:
     # For direct execution or testing
-    import os
     import sys
 
     sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     from packages.utils.providers import get_embedding_client, get_embedding_model
+    from packages.config import settings
 
 # Load environment variables
 load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-# Initialize client with flexible provider
-embedding_client = get_embedding_client()
-EMBEDDING_MODEL = get_embedding_model()
+# Lazy initialization to avoid requiring API keys at import time
+embedding_client = None
+EMBEDDING_MODEL = None
+
+
+def _get_embedding_client():
+    """Get embedding client with lazy initialization."""
+    global embedding_client, EMBEDDING_MODEL
+    if embedding_client is None:
+        embedding_client = get_embedding_client()
+        EMBEDDING_MODEL = get_embedding_model()
+    return embedding_client, EMBEDDING_MODEL
 
 
 class EmbeddingGenerator:
@@ -39,24 +52,28 @@ class EmbeddingGenerator:
 
     def __init__(
         self,
-        model: str = EMBEDDING_MODEL,
-        batch_size: int = 100,
-        max_retries: int = 3,
-        retry_delay: float = 1.0,
+        model: str | None = None,
+        batch_size: int | None = None,
+        max_retries: int | None = None,
+        retry_delay: float | None = None,
     ):
         """
         Initialize embedding generator.
 
         Args:
-            model: OpenAI embedding model to use
-            batch_size: Number of texts to process in parallel
-            max_retries: Maximum number of retry attempts
-            retry_delay: Delay between retries in seconds
+            model: Embedding model to use (default from settings)
+            batch_size: Number of texts to process in parallel (default from settings)
+            max_retries: Maximum number of retry attempts (default from settings)
+            retry_delay: Delay between retries in seconds (default from settings)
         """
-        self.model = model
-        self.batch_size = batch_size
-        self.max_retries = max_retries
-        self.retry_delay = retry_delay
+        # Use settings defaults if not provided
+        self.model = model if model is not None else settings.embedding.model
+        self.batch_size = batch_size if batch_size is not None else settings.embedding.batch_size
+        self.max_retries = max_retries if max_retries is not None else settings.embedding.max_retries
+        self.retry_delay = retry_delay if retry_delay is not None else settings.embedding.retry_delay
+
+        # Lazy load embedding client when first needed
+        self._client = None
 
         # Model-specific configurations
         self.model_configs = {
@@ -70,6 +87,13 @@ class EmbeddingGenerator:
             self.config = {"dimensions": 1536, "max_tokens": 8191}
         else:
             self.config = self.model_configs[model]
+
+    @property
+    def client(self):
+        """Lazy load embedding client on first access."""
+        if self._client is None:
+            self._client, _ = _get_embedding_client()
+        return self._client
 
     async def generate_embedding(self, text: str) -> List[float]:
         """
@@ -87,7 +111,7 @@ class EmbeddingGenerator:
 
         for attempt in range(self.max_retries):
             try:
-                response = await embedding_client.embeddings.create(model=self.model, input=text)
+                response = await self.client.embeddings.create(model=self.model, input=text)
 
                 return response.data[0].embedding
 
@@ -137,7 +161,7 @@ class EmbeddingGenerator:
 
         for attempt in range(self.max_retries):
             try:
-                response = await embedding_client.embeddings.create(
+                response = await self.client.embeddings.create(
                     model=self.model, input=processed_texts
                 )
 
@@ -286,120 +310,7 @@ class EmbeddingGenerator:
         return self.config["dimensions"]
 
 
-# Cache for embeddings
-class EmbeddingCache:
-    """Simple in-memory cache for embeddings."""
-
-    def __init__(self, max_size: int = 1000):
-        """Initialize cache."""
-        self.cache: Dict[str, List[float]] = {}
-        self.access_times: Dict[str, datetime] = {}
-        self.max_size = max_size
-
-    def get(self, text: str) -> Optional[List[float]]:
-        """Get embedding from cache."""
-        text_hash = self._hash_text(text)
-        if text_hash in self.cache:
-            self.access_times[text_hash] = datetime.now()
-            return self.cache[text_hash]
-        return None
-
-    def put(self, text: str, embedding: List[float]):
-        """Store embedding in cache."""
-        text_hash = self._hash_text(text)
-
-        # Evict oldest entries if cache is full
-        if len(self.cache) >= self.max_size:
-            oldest_key = min(self.access_times.keys(), key=lambda k: self.access_times[k])
-            del self.cache[oldest_key]
-            del self.access_times[oldest_key]
-
-        self.cache[text_hash] = embedding
-        self.access_times[text_hash] = datetime.now()
-
-    def _hash_text(self, text: str) -> str:
-        """Generate hash for text."""
-        import hashlib
-
-        return hashlib.md5(text.encode()).hexdigest()
-
-
 # Factory function
-def create_embedder(
-    model: str = EMBEDDING_MODEL, use_cache: bool = True, **kwargs
-) -> EmbeddingGenerator:
-    """
-    Create embedding generator with optional caching.
-
-    Args:
-        model: Embedding model to use
-        use_cache: Whether to use caching
-        **kwargs: Additional arguments for EmbeddingGenerator
-
-    Returns:
-        EmbeddingGenerator instance
-    """
-    embedder = EmbeddingGenerator(model=model, **kwargs)
-
-    if use_cache:
-        # Add caching capability
-        cache = EmbeddingCache()
-        original_generate = embedder.generate_embedding
-
-        async def cached_generate(text: str) -> List[float]:
-            cached = cache.get(text)
-            if cached is not None:
-                return cached
-
-            embedding = await original_generate(text)
-            cache.put(text, embedding)
-            return embedding
-
-        embedder.generate_embedding = cached_generate
-
-    return embedder
-
-
-# Example usage
-async def main():
-    """Example usage of the embedder."""
-    from .chunker import ChunkingConfig, create_chunker
-
-    # Create chunker and embedder
-    config = ChunkingConfig(chunk_size=200, use_semantic_splitting=False)
-    chunker = create_chunker(config)
-    embedder = create_embedder()
-
-    sample_text = """
-    Google's AI initiatives include advanced language models, computer vision,
-    and machine learning research. The company has invested heavily in
-    transformer architectures and neural network optimization.
-    
-    Microsoft's partnership with OpenAI has led to integration of GPT models
-    into various products and services, making AI accessible to enterprise
-    customers through Azure cloud services.
-    """
-
-    # Chunk the document
-    chunks = chunker.chunk_document(
-        content=sample_text, title="AI Initiatives", source="example.md"
-    )
-
-    print(f"Created {len(chunks)} chunks")
-
-    # Generate embeddings
-    def progress_callback(current, total):
-        print(f"Processing batch {current}/{total}")
-
-    embedded_chunks = await embedder.embed_chunks(chunks, progress_callback)
-
-    for i, chunk in enumerate(embedded_chunks):
-        print(f"Chunk {i}: {len(chunk.content)} chars, embedding dim: {len(chunk.embedding)}")
-
-    # Test query embedding
-    query_embedding = await embedder.embed_query("Google AI research")
-    print(f"Query embedding dimension: {len(query_embedding)}")
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
+def create_embedder(model: str | None = None, **kwargs) -> EmbeddingGenerator:
+    """Create embedding generator instance."""
+    return EmbeddingGenerator(model=model, **kwargs)

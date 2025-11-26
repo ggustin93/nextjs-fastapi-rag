@@ -15,13 +15,15 @@ Benefits over custom chunking:
 """
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from docling.chunking import HybridChunker
 from docling_core.types.doc import DoclingDocument
 from dotenv import load_dotenv
 from transformers import AutoTokenizer
+
+from packages.config import settings as app_settings
 
 # Load environment variables
 load_dotenv()
@@ -31,18 +33,29 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class ChunkingConfig:
-    """Configuration for chunking."""
+    """Configuration for chunking with defaults from centralized settings."""
 
-    chunk_size: int = 1000  # Target characters per chunk
-    chunk_overlap: int = 200  # Character overlap between chunks
-    max_chunk_size: int = 2000  # Maximum chunk size
-    min_chunk_size: int = 100  # Minimum chunk size
-    use_semantic_splitting: bool = True  # Use HybridChunker (recommended)
-    preserve_structure: bool = True  # Preserve document structure
-    max_tokens: int = 512  # Maximum tokens for embedding models
+    chunk_size: int | None = None
+    chunk_overlap: int | None = None
+    max_chunk_size: int | None = None
+    min_chunk_size: int | None = None
+    max_tokens: int | None = None
 
     def __post_init__(self):
-        """Validate configuration."""
+        """Apply defaults from settings and validate configuration."""
+        # Apply defaults from centralized settings
+        if self.chunk_size is None:
+            self.chunk_size = app_settings.chunking.chunk_size
+        if self.chunk_overlap is None:
+            self.chunk_overlap = app_settings.chunking.chunk_overlap
+        if self.max_chunk_size is None:
+            self.max_chunk_size = app_settings.chunking.max_chunk_size
+        if self.min_chunk_size is None:
+            self.min_chunk_size = app_settings.chunking.min_chunk_size
+        if self.max_tokens is None:
+            self.max_tokens = app_settings.chunking.max_tokens
+
+        # Validate
         if self.chunk_overlap >= self.chunk_size:
             raise ValueError("Chunk overlap must be less than chunk size")
         if self.min_chunk_size <= 0:
@@ -88,8 +101,8 @@ class DoclingHybridChunker:
         """
         self.config = config
 
-        # Initialize tokenizer for token-aware chunking
-        model_id = "sentence-transformers/all-MiniLM-L6-v2"
+        # Initialize tokenizer for token-aware chunking (from settings)
+        model_id = app_settings.embedding.tokenizer_model
         logger.info(f"Initializing tokenizer: {model_id}")
         self.tokenizer = AutoTokenizer.from_pretrained(model_id)
 
@@ -261,132 +274,7 @@ class DoclingHybridChunker:
         return chunks
 
 
-class SimpleChunker:
-    """
-    Simple non-semantic chunker for faster processing without Docling.
-
-    This is kept as a lightweight alternative when:
-    - Speed is critical
-    - Document structure is simple
-    - Token precision is not required
-    """
-
-    def __init__(self, config: ChunkingConfig):
-        """Initialize simple chunker."""
-        self.config = config
-
-    async def chunk_document(
-        self,
-        content: str,
-        title: str,
-        source: str,
-        metadata: Optional[Dict[str, Any]] = None,
-        **kwargs,  # Ignore extra args like docling_doc
-    ) -> List[DocumentChunk]:
-        """
-        Chunk document using simple paragraph-based rules.
-
-        Args:
-            content: Document content
-            title: Document title
-            source: Document source
-            metadata: Additional metadata
-
-        Returns:
-            List of document chunks
-        """
-        if not content.strip():
-            return []
-
-        base_metadata = {
-            "title": title,
-            "source": source,
-            "chunk_method": "simple",
-            **(metadata or {}),
-        }
-
-        # Split on double newlines (paragraphs)
-        import re
-
-        paragraphs = re.split(r"\n\s*\n", content)
-
-        chunks = []
-        current_chunk = ""
-        current_pos = 0
-        chunk_index = 0
-
-        for paragraph in paragraphs:
-            paragraph = paragraph.strip()
-            if not paragraph:
-                continue
-
-            # Check if adding this paragraph exceeds chunk size
-            potential_chunk = current_chunk + "\n\n" + paragraph if current_chunk else paragraph
-
-            if len(potential_chunk) <= self.config.chunk_size:
-                current_chunk = potential_chunk
-            else:
-                # Save current chunk if it exists
-                if current_chunk:
-                    chunks.append(
-                        self._create_chunk(
-                            current_chunk,
-                            chunk_index,
-                            current_pos,
-                            current_pos + len(current_chunk),
-                            base_metadata.copy(),
-                        )
-                    )
-
-                    current_pos += len(current_chunk)
-                    chunk_index += 1
-
-                # Start new chunk with current paragraph
-                current_chunk = paragraph
-
-        # Add final chunk
-        if current_chunk:
-            chunks.append(
-                self._create_chunk(
-                    current_chunk,
-                    chunk_index,
-                    current_pos,
-                    current_pos + len(current_chunk),
-                    base_metadata.copy(),
-                )
-            )
-
-        # Update total chunks in metadata
-        for chunk in chunks:
-            chunk.metadata["total_chunks"] = len(chunks)
-
-        return chunks
-
-    def _create_chunk(
-        self, content: str, index: int, start_pos: int, end_pos: int, metadata: Dict[str, Any]
-    ) -> DocumentChunk:
-        """Create a DocumentChunk object."""
-        return DocumentChunk(
-            content=content.strip(),
-            index=index,
-            start_char=start_pos,
-            end_char=end_pos,
-            metadata=metadata,
-        )
-
-
 # Factory function
-def create_chunker(config: ChunkingConfig):
-    """
-    Create appropriate chunker based on configuration.
-
-    Args:
-        config: Chunking configuration
-
-    Returns:
-        Chunker instance
-    """
-    if config.use_semantic_splitting:
-        return DoclingHybridChunker(config)
-    else:
-        return SimpleChunker(config)
+def create_chunker(config: ChunkingConfig) -> DoclingHybridChunker:
+    """Create chunker instance."""
+    return DoclingHybridChunker(config)
