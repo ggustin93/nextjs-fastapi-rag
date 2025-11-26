@@ -1,7 +1,7 @@
 [project]
-name = "docling-rag-agent"
+name = "nextjs-fastapi-rag"
 version = "0.1.0"
-description = "Text-based RAG CLI agent with PostgreSQL/PGVector"
+description = "Full-stack RAG application with Next.js frontend and FastAPI backend"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
@@ -12,6 +12,8 @@ dependencies = [
     "docling>=2.55.0",
     "supabase>=2.0.0",
     "httpx>=0.25.0",
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
 ]
 
 [project.optional-dependencies]
