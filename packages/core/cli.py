@@ -18,6 +18,7 @@ from dotenv import load_dotenv
 from pydantic_ai import Agent, RunContext
 
 from packages.__version__ import __version__
+from packages.config import settings
 
 # Load environment variables
 load_dotenv(".env")
@@ -48,7 +49,10 @@ async def initialize_db():
     global db_pool
     if not db_pool:
         db_pool = await asyncpg.create_pool(
-            os.getenv("DATABASE_URL"), min_size=2, max_size=10, command_timeout=60
+            os.getenv("DATABASE_URL"),
+            min_size=settings.database.pool_min_size,
+            max_size=settings.database.pool_max_size,
+            command_timeout=settings.database.command_timeout,
         )
         logger.debug("Database connection pool initialized")
 
@@ -61,17 +65,21 @@ async def close_db():
         logger.debug("Database connection pool closed")
 
 
-async def search_knowledge_base(ctx: RunContext[None], query: str, limit: int = 5) -> str:
+async def search_knowledge_base(
+    ctx: RunContext[None], query: str, limit: int | None = None
+) -> str:
     """
     Search the knowledge base using semantic similarity.
 
     Args:
         query: The search query to find relevant information
-        limit: Maximum number of results to return (default: 5)
+        limit: Maximum number of results to return (default from settings)
 
     Returns:
         Formatted search results with source citations
     """
+    if limit is None:
+        limit = settings.search.default_limit
     try:
         # Ensure database is initialized
         if not db_pool:
@@ -102,11 +110,9 @@ async def search_knowledge_base(ctx: RunContext[None], query: str, limit: int = 
 
         # Build response with sources
         response_parts = []
-        for i, row in enumerate(results, 1):
-            similarity = row["similarity"]
+        for row in results:
             content = row["content"]
             doc_title = row["document_title"]
-            doc_source = row["document_source"]
 
             response_parts.append(f"[Source: {doc_title}]\n{content}\n")
 
@@ -120,10 +126,8 @@ async def search_knowledge_base(ctx: RunContext[None], query: str, limit: int = 
         return f"I encountered an error searching the knowledge base: {str(e)}"
 
 
-# Create the PydanticAI agent with the RAG tool
-agent = Agent(
-    "openai:gpt-4o-mini",
-    system_prompt="""You are an intelligent knowledge assistant with access to an organization's documentation and information.
+# System prompt for the RAG agent (kept as code - defines core agent behavior)
+RAG_SYSTEM_PROMPT = """You are an intelligent knowledge assistant with access to an organization's documentation and information.
 Your role is to help users find accurate information from the knowledge base.
 You have a professional yet friendly demeanor.
 
@@ -131,7 +135,13 @@ IMPORTANT: Always search the knowledge base before answering questions about spe
 If information isn't in the knowledge base, clearly state that and offer general guidance.
 Be concise but thorough in your responses.
 Ask clarifying questions if the user's query is ambiguous.
-When you find relevant information, synthesize it clearly and cite the source documents.""",
+When you find relevant information, synthesize it clearly and cite the source documents."""
+
+# Create the PydanticAI agent with the RAG tool
+# Uses settings.llm.create_model() to support OpenAI, Chutes.ai, Ollama, or any OpenAI-compatible API
+agent = Agent(
+    settings.llm.create_model(),
+    system_prompt=RAG_SYSTEM_PROMPT,
     tools=[search_knowledge_base],
 )
 
@@ -381,21 +391,28 @@ def main():
         logging.getLogger("httpcore").setLevel(logging.WARNING)
         logging.getLogger("openai").setLevel(logging.WARNING)
 
-    # Override model if specified
+    # Override model if specified via CLI argument
     if args.model:
         global agent
+        # CLI override uses simple model identifier (assumes OpenAI provider)
         agent = Agent(
-            f"openai:{args.model}", system_prompt=agent.system_prompt, tools=[search_knowledge_base]
+            f"openai:{args.model}",
+            system_prompt=RAG_SYSTEM_PROMPT,
+            tools=[search_knowledge_base],
         )
-        logger.info(f"Using model: {args.model}")
+        logger.info(f"Using model override: {args.model}")
 
     # Check required environment variables
     if not os.getenv("DATABASE_URL"):
         print(f"{Colors.RED}✗ DATABASE_URL environment variable is required{Colors.END}")
         sys.exit(1)
 
-    if not os.getenv("OPENAI_API_KEY"):
-        print(f"{Colors.RED}✗ OPENAI_API_KEY environment variable is required{Colors.END}")
+    # API key is required unless using a custom base_url (like Ollama)
+    if not settings.llm.api_key and not settings.llm.base_url:
+        print(
+            f"{Colors.RED}✗ LLM_API_KEY or OPENAI_API_KEY environment variable is required{Colors.END}"
+        )
+        print(f"{Colors.YELLOW}  (or set LLM_BASE_URL for local models like Ollama){Colors.END}")
         sys.exit(1)
 
     # Create and run CLI
