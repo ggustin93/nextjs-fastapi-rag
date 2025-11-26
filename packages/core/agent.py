@@ -27,41 +27,57 @@ rest_client = None
 # Global to track last search sources
 last_search_sources = []
 
-# Query reformulation patterns (French interrogative → declarative)
-# This improves semantic matching between questions and declarative document content
-QUERY_TRANSFORMS = {
-    "quelle est": "la valeur de",
-    "quel est": "le critère de",
-    "quelles sont": "les conditions de",
-    "quels sont": "les critères de",
-    "comment": "la procédure pour",
-    "quand": "le moment pour",
-    "où": "le lieu de",
-    "combien": "le montant de",
-    "pourquoi": "la raison de",
-}
+# Question patterns to remove for semantic search (longer patterns first)
+# Removing question words preserves user vocabulary for better embedding match
+QUESTION_PATTERNS = [
+    "quelle est",
+    "quel est",
+    "quelles sont",
+    "quels sont",
+    "comment est-ce que",
+    "comment",
+    "quand est-ce que",
+    "quand",
+    "où est-ce que",
+    "où",
+    "combien de",
+    "combien",
+    "pourquoi est-ce que",
+    "pourquoi",
+    "est-ce que",
+]
 
 
 def reformulate_query(query: str) -> str:
     """
-    Transform interrogative query to declarative for better semantic matching.
+    Remove question words to focus on core keywords for semantic matching.
 
-    This is a deterministic transformation that converts questions into
-    declarative statements, improving embedding similarity with document content.
+    This minimaliste approach removes interrogative patterns while preserving
+    the user's exact vocabulary, letting embeddings handle semantic matching.
     No LLM call = no hallucination risk, no latency, no cost.
+
+    Example: "Quelle est la superficie maximale?" → "superficie maximale"
 
     Args:
         query: The user's question
 
     Returns:
-        Reformulated query in declarative form
+        Query with question words removed
     """
-    query_lower = query.lower().strip()
-    for pattern, replacement in QUERY_TRANSFORMS.items():
-        if query_lower.startswith(pattern):
-            reformulated = query_lower.replace(pattern, replacement, 1)
-            logger.debug(f"Query reformulated: '{query}' → '{reformulated}'")
-            return reformulated
+    # Normalize: lowercase, strip whitespace and punctuation
+    q = query.lower().strip().rstrip("?!.")
+
+    for pattern in QUESTION_PATTERNS:
+        if q.startswith(pattern):
+            # Remove question pattern
+            result = q.replace(pattern, "", 1).strip()
+            # Clean up leading articles/prepositions
+            for article in ["le ", "la ", "les ", "l'", "de ", "du ", "des ", "d'"]:
+                if result.startswith(article):
+                    result = result[len(article) :]
+            logger.debug(f"Query reformulated: '{query}' → '{result}'")
+            return result
+
     return query
 
 

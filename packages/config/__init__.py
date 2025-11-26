@@ -221,7 +221,7 @@ class SearchConfig:
         default_factory=lambda: int(os.getenv("SEARCH_MAX_LIMIT", "50"))
     )
     similarity_threshold: float = field(
-        default_factory=lambda: float(os.getenv("SEARCH_SIMILARITY_THRESHOLD", "0.3"))
+        default_factory=lambda: float(os.getenv("SEARCH_SIMILARITY_THRESHOLD", "0.5"))
     )
 
 

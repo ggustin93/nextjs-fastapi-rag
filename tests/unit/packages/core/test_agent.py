@@ -99,15 +99,15 @@ class TestSystemPrompt:
         agent_mod = get_agent_module()
 
         prompt_lower = self._get_system_prompt(agent_mod).lower()
-        # Should instruct to search knowledge base before answering
-        assert "knowledge base" in prompt_lower
-        assert "search" in prompt_lower
+        # Should instruct to search knowledge base before answering (French)
+        assert "base de connaissances" in prompt_lower or "base de données" in prompt_lower
+        assert "cherche" in prompt_lower or "recherche" in prompt_lower
 
     def test_system_prompt_handles_missing_info(self):
         """System prompt should handle missing information gracefully."""
         agent_mod = get_agent_module()
 
         prompt_lower = self._get_system_prompt(agent_mod).lower()
-        # Should handle case when info isn't found
-        assert "not" in prompt_lower or "isn't" in prompt_lower
-        assert "clearly state" in prompt_lower or "cite" in prompt_lower
+        # Should handle case when info isn't found (French)
+        assert "n'est pas" in prompt_lower or "pas dans" in prompt_lower
+        assert "dis-le clairement" in prompt_lower or "cite" in prompt_lower

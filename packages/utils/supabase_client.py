@@ -173,7 +173,7 @@ class SupabaseRestClient:
         self,
         query_embedding: List[float],
         limit: int = 10,
-        similarity_threshold: float = 0.3,
+        similarity_threshold: float = 0.5,
     ) -> List[Dict[str, Any]]:
         """
         Vector similarity search via Supabase RPC function.
@@ -181,31 +181,31 @@ class SupabaseRestClient:
         Args:
             query_embedding: Query vector (1536 dimensions)
             limit: Maximum number of results
-            similarity_threshold: Minimum similarity score (0-1), filters out low-quality matches
+            similarity_threshold: Minimum similarity score (0-1), passed to PostgreSQL for efficient filtering
 
         Returns:
-            List of matching chunks with similarity scores, filtered by threshold
+            List of matching chunks with similarity scores above threshold
         """
         try:
             # PostgreSQL vector format
             embedding_str = "[" + ",".join(map(str, query_embedding)) + "]"
 
+            # Pass threshold to PostgreSQL function for server-side filtering
+            # More efficient than fetching all results and filtering in Python
             response = self.client.rpc(
-                "match_chunks", {"query_embedding": embedding_str, "match_count": limit}
+                "match_chunks",
+                {
+                    "query_embedding": embedding_str,
+                    "match_count": limit,
+                    "similarity_threshold": similarity_threshold,
+                },
             ).execute()
 
-            # Filter results by similarity threshold
-            filtered_results = [
-                r for r in response.data
-                if r.get("similarity", 0) >= similarity_threshold
-            ]
-
             logger.debug(
-                f"Similarity search: {len(response.data)} results, "
-                f"{len(filtered_results)} above threshold {similarity_threshold}"
+                f"Similarity search: {len(response.data)} results above threshold {similarity_threshold}"
             )
 
-            return filtered_results
+            return response.data
 
         except Exception as e:
             logger.error(f"Error in similarity search: {e}")
