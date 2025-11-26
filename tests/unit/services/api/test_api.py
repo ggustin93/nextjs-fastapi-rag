@@ -34,7 +34,7 @@ class TestHealthEndpoints:
         data = response.json()
         assert "name" in data
         assert "version" in data
-        assert data["name"] == "Docling RAG Agent API"
+        assert data["name"] == "nextjs-fastapi-rag API"
 
     @pytest.mark.asyncio
     async def test_health_endpoint(self, client):

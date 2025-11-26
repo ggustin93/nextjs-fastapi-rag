@@ -1,5 +1,5 @@
 """
-Osiris Web Scraper Module
+Web Scraper Module
 
 Generic, extensible web scraper using Crawl4AI for markdown generation.
 Integrates with existing document ingestion pipeline.
