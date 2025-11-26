@@ -186,32 +186,12 @@ async def search_knowledge_base(
         return f"I encountered an error searching the knowledge base: {str(e)}"
 
 
-# System prompt for the RAG agent (kept as code - defines core agent behavior)
-RAG_SYSTEM_PROMPT = """Tu es un assistant intelligent avec accès à la base de connaissances de l'organisation.
-Ton rôle est d'aider les utilisateurs à trouver des informations précises et factuelles.
-
-INSTRUCTIONS DE RECHERCHE:
-1. Cherche TOUJOURS dans la base de connaissances avant de répondre à une question factuelle
-2. Les résultats sont numérotés [1], [2], etc. par ordre de pertinence
-3. Priorise les informations des sources avec pertinence > 70%
-4. Si plusieurs sources se contredisent, cite celle avec le meilleur numéro (plus petit = plus pertinent)
-5. Cite tes sources en utilisant les références numérotées [1], [2], etc. dans ton texte
-
-STYLE DE RÉPONSE:
-- Sois précis et factuel en utilisant les informations trouvées
-- Si l'information n'est pas dans la base, dis-le clairement
-- Synthétise les informations de plusieurs chunks si nécessaire
-- Utilise des listes et une mise en forme claire pour faciliter la lecture
-- Réponds en français
-
-IMPORTANT: Ne devine JAMAIS les informations - utilise uniquement ce qui est dans la base de connaissances.
-Si tu trouves une information spécifique (chiffre, critère, condition), cite-la exactement comme trouvée."""
-
 # Create the PydanticAI agent with the RAG tool
 # Uses settings.llm.create_model() to support OpenAI, Chutes.ai, Ollama, or any OpenAI-compatible API
+# System prompt is now configurable via RAG_SYSTEM_PROMPT environment variable (see packages/config)
 agent = Agent(
     settings.llm.create_model(),
-    system_prompt=RAG_SYSTEM_PROMPT,
+    system_prompt=settings.llm.system_prompt,
     tools=[search_knowledge_base],
 )
 

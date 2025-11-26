@@ -26,6 +26,28 @@ from functools import lru_cache
 from typing import List, Optional, Union
 
 
+# Default RAG system prompt (can be overridden via RAG_SYSTEM_PROMPT env var)
+DEFAULT_SYSTEM_PROMPT = """Tu es un assistant intelligent avec accès à la base de connaissances de l'organisation.
+Ton rôle est d'aider les utilisateurs à trouver des informations précises et factuelles.
+
+INSTRUCTIONS DE RECHERCHE:
+1. Cherche TOUJOURS dans la base de connaissances avant de répondre à une question factuelle
+2. Les résultats sont numérotés [1], [2], etc. par ordre de pertinence
+3. Priorise les informations des sources avec pertinence > 70%
+4. Si plusieurs sources se contredisent, cite celle avec le meilleur numéro (plus petit = plus pertinent)
+5. Cite tes sources en utilisant les références numérotées [1], [2], etc. dans ton texte
+
+STYLE DE RÉPONSE:
+- Sois précis et factuel en utilisant les informations trouvées
+- Si l'information n'est pas dans la base, dis-le clairement
+- Synthétise les informations de plusieurs chunks si nécessaire
+- Utilise des listes et une mise en forme claire pour faciliter la lecture
+- Réponds en français
+
+IMPORTANT: Ne devine JAMAIS les informations - utilise uniquement ce qui est dans la base de connaissances.
+Si tu trouves une information spécifique (chiffre, critère, condition), cite-la exactement comme trouvée."""
+
+
 @dataclass(frozen=True)
 class LLMConfig:
     """LLM model configuration with multi-provider support.
@@ -37,11 +59,15 @@ class LLMConfig:
         LLM_MODEL: Model name (default: "gpt-4o-mini")
         LLM_BASE_URL: Custom API base URL for OpenAI-compatible APIs
         LLM_API_KEY: API key (falls back to OPENAI_API_KEY)
+        RAG_SYSTEM_PROMPT: Custom system prompt for RAG agent (optional)
 
     Example - Chutes.ai:
         LLM_BASE_URL=https://myuser-my-chute.chutes.ai/v1
         LLM_MODEL=meta-llama/Llama-3.1-8B-Instruct
         LLM_API_KEY=your-chutes-api-key
+
+    Example - Custom prompt:
+        RAG_SYSTEM_PROMPT="Tu es un expert juridique belge..."
     """
 
     provider: str = field(
@@ -59,6 +85,9 @@ class LLMConfig:
         default_factory=lambda: os.getenv(
             "LLM_API_KEY", os.getenv("OPENAI_API_KEY")
         )
+    )
+    system_prompt: str = field(
+        default_factory=lambda: os.getenv("RAG_SYSTEM_PROMPT", DEFAULT_SYSTEM_PROMPT)
     )
 
     @property
@@ -221,7 +250,7 @@ class SearchConfig:
         default_factory=lambda: int(os.getenv("SEARCH_MAX_LIMIT", "50"))
     )
     similarity_threshold: float = field(
-        default_factory=lambda: float(os.getenv("SEARCH_SIMILARITY_THRESHOLD", "0.5"))
+        default_factory=lambda: float(os.getenv("SEARCH_SIMILARITY_THRESHOLD", "0.4"))
     )
 
 

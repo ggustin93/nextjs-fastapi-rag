@@ -173,7 +173,7 @@ class SupabaseRestClient:
         self,
         query_embedding: List[float],
         limit: int = 10,
-        similarity_threshold: float = 0.5,
+        similarity_threshold: float = 0.4,
     ) -> List[Dict[str, Any]]:
         """
         Vector similarity search via Supabase RPC function.
