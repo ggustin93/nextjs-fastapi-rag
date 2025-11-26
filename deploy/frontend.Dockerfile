@@ -1,22 +1,22 @@
 # ====================================
-# Frontend Dockerfile for Osiris MultiRAG Agent
+# Frontend Dockerfile for nextjs-fastapi-rag
 # ====================================
 
 # Build stage
-FROM node:18-alpine AS builder
+FROM node:20-alpine AS builder
 
 # Set working directory
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# Copy package files from services/web
+COPY services/web/package*.json ./
 
-# Install dependencies
-RUN npm ci --only=production && \
+# Install ALL dependencies (build needs devDependencies)
+RUN npm ci && \
     npm cache clean --force
 
-# Copy source code
-COPY . .
+# Copy source code from services/web
+COPY services/web/ .
 
 # Build arguments for environment variables
 ARG NEXT_PUBLIC_API_URL=http://localhost:8000
@@ -28,7 +28,7 @@ RUN npm run build
 # ====================================
 # Production stage
 # ====================================
-FROM node:18-alpine
+FROM node:20-alpine
 
 # Install dumb-init for proper signal handling
 RUN apk add --no-cache dumb-init

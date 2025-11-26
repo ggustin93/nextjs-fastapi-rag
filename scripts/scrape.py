@@ -34,7 +34,7 @@ from packages.scraper import (
 
 def get_default_config_path() -> Path:
     """Get the default sources.yaml path."""
-    return project_root / "packages" / "scraper" / "sources.yaml"
+    return project_root / "data" / "raw" / "web" / "sources.yaml"
 
 
 async def crawl_source(config: CrawlerConfig, source_name: str) -> None:

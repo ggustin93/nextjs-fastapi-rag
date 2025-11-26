@@ -2,10 +2,10 @@
 
 #===============================================================================
 # restart-servers.sh
-# Production-quality script to restart development servers for osiris-multirag-agent
+# Production-quality script to restart development servers for nextjs-fastapi-rag
 #
 # Usage: ./scripts/restart-servers.sh
-# Run from project root: /Users/pwablo/Documents/Gitlab/osiris-multirag-agent/
+# Run from project root: /Users/pwablo/Documents/Gitlab/nextjs-fastapi-rag/
 #
 # Services:
 #   - Backend:  FastAPI (Python 3.9) on port 8000
@@ -17,7 +17,7 @@ set -euo pipefail
 #-------------------------------------------------------------------------------
 # Configuration
 #-------------------------------------------------------------------------------
-PROJECT_ROOT="/Users/pwablo/Documents/Gitlab/osiris-multirag-agent"
+PROJECT_ROOT="/Users/pwablo/Documents/Gitlab/nextjs-fastapi-rag"
 BACKEND_DIR="${PROJECT_ROOT}/services/api"
 FRONTEND_DIR="${PROJECT_ROOT}/services/web"
 LOGS_DIR="${PROJECT_ROOT}/logs"
@@ -141,14 +141,22 @@ start_backend() {
 
     cd "${BACKEND_DIR}"
 
-    # Start uvicorn in background with PYTHONPATH set for packages import
-    (
-        set +e  # Disable strict mode in subshell
-        export PYTHONPATH="${PROJECT_ROOT}:${PYTHONPATH:-}"
-        # Try backend .venv first, then project root .venv
-        source "${BACKEND_DIR}/.venv/bin/activate" 2>/dev/null || source "${PROJECT_ROOT}/.venv/bin/activate" 2>/dev/null || true
-        exec uvicorn app.main:app --reload --host 0.0.0.0 --port "${BACKEND_PORT}"
-    ) >> "${BACKEND_LOG}" 2>&1 &
+    # Determine which venv to use
+    local VENV_DIR
+    if [[ -d "${BACKEND_DIR}/.venv" ]]; then
+        VENV_DIR="${BACKEND_DIR}/.venv"
+    elif [[ -d "${PROJECT_ROOT}/.venv" ]]; then
+        VENV_DIR="${PROJECT_ROOT}/.venv"
+    else
+        log_error "No virtual environment found"
+        return 1
+    fi
+
+    # Start uvicorn using venv's Python directly (more reliable than sourcing activate)
+    PYTHONPATH="${PROJECT_ROOT}:${PYTHONPATH:-}" \
+    "${VENV_DIR}/bin/python" -m uvicorn app.main:app \
+        --reload --host 0.0.0.0 --port "${BACKEND_PORT}" \
+        >> "${BACKEND_LOG}" 2>&1 &
 
     BACKEND_PID=$!
 
@@ -222,7 +230,7 @@ trap cleanup EXIT
 #-------------------------------------------------------------------------------
 main() {
     echo -e "\n${BOLD}${CYAN}╔══════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${BOLD}${CYAN}║          Osiris MultiRAG Agent - Server Restart              ║${NC}"
+    echo -e "${BOLD}${CYAN}║          nextjs-fastapi-rag - Server Restart                 ║${NC}"
     echo -e "${BOLD}${CYAN}╚══════════════════════════════════════════════════════════════╝${NC}\n"
 
     log_info "Timestamp: ${TIMESTAMP}"

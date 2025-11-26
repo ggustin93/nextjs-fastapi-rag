@@ -1,9 +1,9 @@
 # ====================================
-# Backend Dockerfile for Osiris MultiRAG Agent
+# Backend Dockerfile for nextjs-fastapi-rag
 # ====================================
 
 # Use Python slim image for smaller size
-FROM python:3.11-slim as builder
+FROM python:3.11-slim AS builder
 
 # Set working directory
 WORKDIR /app
@@ -52,12 +52,14 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 # Copy application code
 COPY --chown=appuser:appuser packages/ ./packages/
 COPY --chown=appuser:appuser services/api/ ./services/api/
-COPY --chown=appuser:appuser data/ ./data/
+
+# Create data directories (may not exist in CI)
+RUN mkdir -p /app/data/raw /app/data/processed
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONPATH=/app:$PYTHONPATH \
+    PYTHONPATH=/app \
     PORT=8000
 
 # Switch to non-root user
