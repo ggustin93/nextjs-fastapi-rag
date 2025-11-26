@@ -1,7 +1,8 @@
 """
 RAG CLI Agent with PostgreSQL/PGVector
 =======================================
-Text-based CLI agent that searches through knowledge base using semantic similarity
+Text-based CLI agent that searches through knowledge base using semantic similarity.
+Uses deterministic query reformulation for improved semantic matching.
 """
 
 import asyncio
@@ -12,6 +13,7 @@ import sys
 from dotenv import load_dotenv
 from pydantic_ai import Agent, RunContext
 
+from packages.config import settings
 from packages.utils.supabase_client import SupabaseRestClient
 
 # Load environment variables
@@ -24,6 +26,43 @@ rest_client = None
 
 # Global to track last search sources
 last_search_sources = []
+
+# Query reformulation patterns (French interrogative → declarative)
+# This improves semantic matching between questions and declarative document content
+QUERY_TRANSFORMS = {
+    "quelle est": "la valeur de",
+    "quel est": "le critère de",
+    "quelles sont": "les conditions de",
+    "quels sont": "les critères de",
+    "comment": "la procédure pour",
+    "quand": "le moment pour",
+    "où": "le lieu de",
+    "combien": "le montant de",
+    "pourquoi": "la raison de",
+}
+
+
+def reformulate_query(query: str) -> str:
+    """
+    Transform interrogative query to declarative for better semantic matching.
+
+    This is a deterministic transformation that converts questions into
+    declarative statements, improving embedding similarity with document content.
+    No LLM call = no hallucination risk, no latency, no cost.
+
+    Args:
+        query: The user's question
+
+    Returns:
+        Reformulated query in declarative form
+    """
+    query_lower = query.lower().strip()
+    for pattern, replacement in QUERY_TRANSFORMS.items():
+        if query_lower.startswith(pattern):
+            reformulated = query_lower.replace(pattern, replacement, 1)
+            logger.debug(f"Query reformulated: '{query}' → '{reformulated}'")
+            return reformulated
+    return query
 
 
 def get_last_sources():
@@ -51,41 +90,59 @@ async def close_db():
         logger.info("Supabase REST client closed")
 
 
-async def search_knowledge_base(ctx: RunContext[None], query: str, limit: int = 5) -> str:
+async def search_knowledge_base(
+    ctx: RunContext[None], query: str, limit: int | None = None
+) -> str:
     """
     Search the knowledge base using semantic similarity.
 
     Args:
         query: The search query to find relevant information
-        limit: Maximum number of results to return (default: 5)
+        limit: Maximum number of results to return (default from settings)
 
     Returns:
-        Formatted search results with source citations
+        Formatted search results with source citations and relevance scores
     """
+    if limit is None:
+        limit = settings.search.default_limit
+
+    similarity_threshold = settings.search.similarity_threshold
+
     try:
         # Ensure database is initialized
         if not rest_client:
             await initialize_db()
 
-        # Generate embedding for query
+        # Reformulate query for better semantic matching
+        # Converts "Quelle est la superficie..." → "la valeur de la superficie..."
+        search_query = reformulate_query(query)
+
+        # Generate embedding for reformulated query
         from packages.ingestion.embedder import create_embedder
 
         embedder = create_embedder()
-        query_embedding = await embedder.embed_query(query)
+        query_embedding = await embedder.embed_query(search_query)
 
-        # Search using REST API
-        results = await rest_client.similarity_search(query_embedding=query_embedding, limit=limit)
+        # Search using REST API with threshold filtering
+        results = await rest_client.similarity_search(
+            query_embedding=query_embedding,
+            limit=limit,
+            similarity_threshold=similarity_threshold,
+        )
 
         # Format results for response
         if not results:
-            return "No relevant information found in the knowledge base for your query."
+            return "Aucune information pertinente trouvée dans la base de connaissances pour cette requête."
+
+        # Sort results by similarity (highest first)
+        sorted_results = sorted(results, key=lambda x: x.get("similarity", 0), reverse=True)
 
         # Build response with sources and track them globally
         global last_search_sources
         response_parts = []
         sources_tracked = []
 
-        for i, row in enumerate(results, 1):
+        for index, row in enumerate(sorted_results):
             similarity = row["similarity"]
             content = row["content"]
             doc_title = row["document_title"]
@@ -96,35 +153,49 @@ async def search_knowledge_base(ctx: RunContext[None], query: str, limit: int = 
                 {"title": doc_title, "path": doc_source, "similarity": similarity}
             )
 
-            # Include both title and file path for exact source citation
-            source_citation = f"[Source: {doc_title} ({doc_source})]"
-            response_parts.append(f"{source_citation}\n{content}\n")
+            # Use numbered reference [1], [2], etc. for citation
+            source_ref = f"[{index + 1}]"
+            response_parts.append(f"{source_ref}\n{content}\n")
 
         # Store sources globally for retrieval
         last_search_sources = sources_tracked
 
         if not response_parts:
-            return "Found some results but they may not be directly relevant to your query. Please try rephrasing your question."
+            return "Des résultats ont été trouvés mais ils ne semblent pas directement pertinents. Essayez de reformuler votre question."
 
-        return f"Found {len(response_parts)} relevant results:\n\n" + "\n---\n".join(response_parts)
+        return f"Trouvé {len(response_parts)} résultats pertinents (triés par pertinence):\n\n" + "\n---\n".join(response_parts)
 
     except Exception as e:
         logger.error(f"Knowledge base search failed: {e}", exc_info=True)
         return f"I encountered an error searching the knowledge base: {str(e)}"
 
 
-# Create the PydanticAI agent with the RAG tool
-agent = Agent(
-    "openai:gpt-4o-mini",
-    system_prompt="""You are an intelligent knowledge assistant with access to an organization's documentation and information.
-Your role is to help users find accurate information from the knowledge base.
-You have a professional yet friendly demeanor.
+# System prompt for the RAG agent (kept as code - defines core agent behavior)
+RAG_SYSTEM_PROMPT = """Tu es un assistant intelligent avec accès à la base de connaissances de l'organisation.
+Ton rôle est d'aider les utilisateurs à trouver des informations précises et factuelles.
 
-IMPORTANT: Always search the knowledge base before answering questions about specific information.
-If information isn't in the knowledge base, clearly state that and offer general guidance.
-Be concise but thorough in your responses.
-Ask clarifying questions if the user's query is ambiguous.
-When you find relevant information, synthesize it clearly and cite the source documents.""",
+INSTRUCTIONS DE RECHERCHE:
+1. Cherche TOUJOURS dans la base de connaissances avant de répondre à une question factuelle
+2. Les résultats sont numérotés [1], [2], etc. par ordre de pertinence
+3. Priorise les informations des sources avec pertinence > 70%
+4. Si plusieurs sources se contredisent, cite celle avec le meilleur numéro (plus petit = plus pertinent)
+5. Cite tes sources en utilisant les références numérotées [1], [2], etc. dans ton texte
+
+STYLE DE RÉPONSE:
+- Sois précis et factuel en utilisant les informations trouvées
+- Si l'information n'est pas dans la base, dis-le clairement
+- Synthétise les informations de plusieurs chunks si nécessaire
+- Utilise des listes et une mise en forme claire pour faciliter la lecture
+- Réponds en français
+
+IMPORTANT: Ne devine JAMAIS les informations - utilise uniquement ce qui est dans la base de connaissances.
+Si tu trouves une information spécifique (chiffre, critère, condition), cite-la exactement comme trouvée."""
+
+# Create the PydanticAI agent with the RAG tool
+# Uses settings.llm.create_model() to support OpenAI, Chutes.ai, Ollama, or any OpenAI-compatible API
+agent = Agent(
+    settings.llm.create_model(),
+    system_prompt=RAG_SYSTEM_PROMPT,
     tools=[search_knowledge_base],
 )
 
@@ -203,8 +274,10 @@ async def main():
         logger.error("SUPABASE_URL environment variable is required")
         sys.exit(1)
 
-    if not os.getenv("OPENAI_API_KEY"):
-        logger.error("OPENAI_API_KEY environment variable is required")
+    # API key is required unless using a custom base_url (like Ollama)
+    if not settings.llm.api_key and not settings.llm.base_url:
+        logger.error("LLM_API_KEY or OPENAI_API_KEY environment variable is required")
+        logger.error("(or set LLM_BASE_URL for local models like Ollama)")
         sys.exit(1)
 
     # Run the CLI
