@@ -12,6 +12,8 @@ import asyncpg
 from asyncpg.pool import Pool
 from dotenv import load_dotenv
 
+from packages.config import settings
+
 # Load environment variables
 load_dotenv()
 
@@ -35,15 +37,15 @@ class DatabasePool:
         self.pool: Optional[Pool] = None
 
     async def initialize(self):
-        """Create connection pool."""
+        """Create connection pool with settings from centralized config."""
         if not self.pool:
             self.pool = await asyncpg.create_pool(
                 self.database_url,
-                min_size=1,
-                max_size=5,
+                min_size=settings.database.pool_min_size,
+                max_size=settings.database.pool_max_size,
                 max_inactive_connection_lifetime=300,
-                command_timeout=60,
-                timeout=30,
+                command_timeout=settings.database.command_timeout,
+                timeout=settings.database.connection_timeout,
             )
             logger.info("Database connection pool initialized")
 
@@ -92,7 +94,7 @@ async def get_document(document_id: str) -> Optional[Dict[str, Any]]:
     async with db_pool.acquire() as conn:
         result = await conn.fetchrow(
             """
-            SELECT 
+            SELECT
                 id::text,
                 title,
                 source,
@@ -136,7 +138,7 @@ async def list_documents(
     """
     async with db_pool.acquire() as conn:
         query = """
-            SELECT 
+            SELECT
                 d.id::text,
                 d.title,
                 d.source,

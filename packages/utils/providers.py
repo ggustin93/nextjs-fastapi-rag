@@ -1,100 +1,25 @@
-"""
-Simplified provider configuration for OpenAI models only.
-"""
-
-import os
+"""Provider configuration for OpenAI-compatible embedding APIs."""
 
 import openai
-from dotenv import load_dotenv
-from pydantic_ai.models.openai import OpenAIModel
-from pydantic_ai.providers.openai import OpenAIProvider
 
-# Load environment variables
-load_dotenv()
-
-
-def get_llm_model() -> OpenAIModel:
-    """
-    Get LLM model configuration for OpenAI.
-
-    Returns:
-        Configured OpenAI model
-    """
-    llm_choice = os.getenv("LLM_CHOICE", "gpt-4o-mini")
-    api_key = os.getenv("OPENAI_API_KEY")
-
-    if not api_key:
-        raise ValueError("OPENAI_API_KEY environment variable is required")
-
-    return OpenAIModel(llm_choice, provider=OpenAIProvider(api_key=api_key))
+from packages.config import settings
 
 
 def get_embedding_client() -> openai.AsyncOpenAI:
-    """
-    Get OpenAI client for embeddings.
+    """Get OpenAI-compatible client for embeddings."""
+    api_key = settings.embedding.api_key if hasattr(settings.embedding, 'api_key') else settings.llm.api_key
+    base_url = settings.embedding.base_url if hasattr(settings.embedding, 'base_url') else None
 
-    Returns:
-        Configured OpenAI client for embeddings
-    """
-    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key and not base_url:
+        raise ValueError("LLM_API_KEY or OPENAI_API_KEY environment variable is required")
 
-    if not api_key:
-        raise ValueError("OPENAI_API_KEY environment variable is required")
+    kwargs = {"api_key": api_key or "not-needed"}
+    if base_url:
+        kwargs["base_url"] = base_url
 
-    return openai.AsyncOpenAI(api_key=api_key)
+    return openai.AsyncOpenAI(**kwargs)
 
 
 def get_embedding_model() -> str:
-    """
-    Get embedding model name.
-
-    Returns:
-        Embedding model name
-    """
-    return os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
-
-
-def get_ingestion_model() -> OpenAIModel:
-    """
-    Get model for ingestion tasks (uses same model as main LLM).
-
-    Returns:
-        Configured model for ingestion tasks
-    """
-    return get_llm_model()
-
-
-def validate_configuration() -> bool:
-    """
-    Validate that required environment variables are set.
-
-    Returns:
-        True if configuration is valid
-    """
-    required_vars = ["OPENAI_API_KEY", "DATABASE_URL"]
-
-    missing_vars = []
-    for var in required_vars:
-        if not os.getenv(var):
-            missing_vars.append(var)
-
-    if missing_vars:
-        print(f"Missing required environment variables: {', '.join(missing_vars)}")
-        return False
-
-    return True
-
-
-def get_model_info() -> dict:
-    """
-    Get information about current model configuration.
-
-    Returns:
-        Dictionary with model configuration info
-    """
-    return {
-        "llm_provider": "openai",
-        "llm_model": os.getenv("LLM_CHOICE", "gpt-4o-mini"),
-        "embedding_provider": "openai",
-        "embedding_model": get_embedding_model(),
-    }
+    """Get embedding model name from settings."""
+    return settings.embedding.model

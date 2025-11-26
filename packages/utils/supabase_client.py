@@ -1,14 +1,28 @@
 """
 Supabase REST API client for database operations.
+
 Uses Supabase Python SDK (HTTPS) to work around network restrictions.
+Includes caching support for frequently accessed data.
+
+Features:
+    - REST API access to Supabase PostgreSQL
+    - Vector similarity search via pgvector
+    - LRU caching for document metadata and query results
+    - Batch operations for improved performance
 """
 
 import logging
 import os
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
 from supabase import Client, create_client
+
+from .cache import (
+    document_metadata_cache,
+    generate_cache_key,
+    query_result_cache,
+)
 
 # Load environment variables
 load_dotenv()
@@ -156,7 +170,10 @@ class SupabaseRestClient:
             raise
 
     async def similarity_search(
-        self, query_embedding: List[float], limit: int = 10
+        self,
+        query_embedding: List[float],
+        limit: int = 10,
+        similarity_threshold: float = 0.3,
     ) -> List[Dict[str, Any]]:
         """
         Vector similarity search via Supabase RPC function.
@@ -164,10 +181,10 @@ class SupabaseRestClient:
         Args:
             query_embedding: Query vector (1536 dimensions)
             limit: Maximum number of results
-            threshold: Minimum similarity score (0-1)
+            similarity_threshold: Minimum similarity score (0-1), filters out low-quality matches
 
         Returns:
-            List of matching chunks with similarity scores
+            List of matching chunks with similarity scores, filtered by threshold
         """
         try:
             # PostgreSQL vector format
@@ -177,7 +194,18 @@ class SupabaseRestClient:
                 "match_chunks", {"query_embedding": embedding_str, "match_count": limit}
             ).execute()
 
-            return response.data
+            # Filter results by similarity threshold
+            filtered_results = [
+                r for r in response.data
+                if r.get("similarity", 0) >= similarity_threshold
+            ]
+
+            logger.debug(
+                f"Similarity search: {len(response.data)} results, "
+                f"{len(filtered_results)} above threshold {similarity_threshold}"
+            )
+
+            return filtered_results
 
         except Exception as e:
             logger.error(f"Error in similarity search: {e}")
@@ -200,3 +228,162 @@ class SupabaseRestClient:
         except Exception as e:
             logger.error(f"Error getting chunk count: {e}")
             return 0
+
+    async def get_document_by_id(
+        self, document_id: str, use_cache: bool = True
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get document by ID with optional caching.
+
+        Args:
+            document_id: Document UUID
+            use_cache: Whether to use cache (default: True)
+
+        Returns:
+            Document data or None if not found
+        """
+        cache_key = f"doc:{document_id}"
+
+        # Try cache first
+        if use_cache:
+            cached_doc = await document_metadata_cache.async_get(cache_key)
+            if cached_doc is not None:
+                logger.debug(f"Cache hit for document: {document_id}")
+                return cached_doc
+
+        # Fetch from database
+        try:
+            response = (
+                self.client.table("documents")
+                .select("*")
+                .eq("id", document_id)
+                .single()
+                .execute()
+            )
+
+            if response.data:
+                # Cache the result
+                await document_metadata_cache.async_set(cache_key, response.data)
+                return response.data
+            return None
+
+        except Exception as e:
+            logger.error(f"Error fetching document {document_id}: {e}")
+            return None
+
+    async def get_document_by_source(
+        self, source: str, use_cache: bool = True
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get document by source path with optional caching.
+
+        Args:
+            source: Document source path
+            use_cache: Whether to use cache (default: True)
+
+        Returns:
+            Document data or None if not found
+        """
+        cache_key = f"doc_source:{source}"
+
+        # Try cache first
+        if use_cache:
+            cached_doc = await document_metadata_cache.async_get(cache_key)
+            if cached_doc is not None:
+                logger.debug(f"Cache hit for document source: {source}")
+                return cached_doc
+
+        # Fetch from database
+        try:
+            response = (
+                self.client.table("documents")
+                .select("*")
+                .eq("source", source)
+                .single()
+                .execute()
+            )
+
+            if response.data:
+                await document_metadata_cache.async_set(cache_key, response.data)
+                return response.data
+            return None
+
+        except Exception as e:
+            logger.error(f"Error fetching document by source {source}: {e}")
+            return None
+
+    async def similarity_search_cached(
+        self,
+        query_embedding: List[float],
+        limit: int = 10,
+        cache_ttl: int = 60,
+    ) -> List[Dict[str, Any]]:
+        """
+        Cached vector similarity search.
+
+        Results are cached for a short period to handle repeated queries.
+        Useful for users refining their questions.
+
+        Args:
+            query_embedding: Query vector (1536 dimensions)
+            limit: Maximum number of results
+            cache_ttl: Cache time-to-live in seconds (default: 60)
+
+        Returns:
+            List of matching chunks with similarity scores
+        """
+        # Generate cache key from embedding (first 8 values + limit)
+        cache_key = f"sim_search:{generate_cache_key(query_embedding[:8], limit=limit)}"
+
+        # Try cache first
+        cached_result = await query_result_cache.async_get(cache_key)
+        if cached_result is not None:
+            logger.debug("Cache hit for similarity search")
+            return cached_result
+
+        # Execute search
+        result = await self.similarity_search(query_embedding, limit)
+
+        # Cache the result
+        await query_result_cache.async_set(cache_key, result, cache_ttl)
+
+        return result
+
+    async def execute_rpc(
+        self, function_name: str, params: Dict[str, Any]
+    ) -> Optional[Any]:
+        """
+        Execute a Supabase RPC function.
+
+        Args:
+            function_name: Name of the PostgreSQL function
+            params: Parameters to pass to the function
+
+        Returns:
+            Function result or None on error
+        """
+        try:
+            response = self.client.rpc(function_name, params).execute()
+            return response.data
+        except Exception as e:
+            logger.error(f"Error executing RPC {function_name}: {e}")
+            return None
+
+    def invalidate_document_cache(self, document_id: str) -> None:
+        """
+        Invalidate cache for a specific document.
+
+        Call this after document updates/deletes.
+
+        Args:
+            document_id: Document UUID to invalidate
+        """
+        cache_key = f"doc:{document_id}"
+        document_metadata_cache.delete(cache_key)
+        logger.debug(f"Invalidated cache for document: {document_id}")
+
+    def clear_all_caches(self) -> None:
+        """Clear all caches. Use after bulk operations."""
+        document_metadata_cache.clear()
+        query_result_cache.clear()
+        logger.info("Cleared all Supabase client caches")
