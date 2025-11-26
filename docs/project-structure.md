@@ -1,9 +1,9 @@
-# Project Structure - Docling RAG Agent
+# Project Structure - nextjs-fastapi-rag
 
 ## Directory Tree
 
 ```
-osiris-multirag-agent/
+nextjs-fastapi-rag/
 ├── packages/                    # 📦 Core Python packages
 │   ├── core/                    # RAG agent and CLI
 │   │   ├── __init__.py

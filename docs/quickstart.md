@@ -1,6 +1,6 @@
 # Quick Start: Chat Interface
 
-This guide will help you quickly get the Next.js chat interface running with the Docling RAG Agent backend.
+This guide will help you quickly get the Next.js chat interface running with the nextjs-fastapi-rag backend.
 
 ## Prerequisites
 
@@ -93,7 +93,7 @@ Try asking questions like:
 ## Project Structure
 
 ```
-osiris-multirag-agent/
+nextjs-fastapi-rag/
 ├── packages/               # Core Python packages
 │   ├── core/              # RAG agent and CLI
 │   │   ├── agent.py       # Core RAG logic
@@ -163,14 +163,23 @@ osiris-multirag-agent/
 ### Backend (.env)
 ```bash
 # Required
+DATABASE_URL=postgresql://user:password@localhost:5432/dbname
 OPENAI_API_KEY=your_openai_api_key
 
-# Database
-DATABASE_URL=postgresql://user:password@localhost:5432/dbname
+# LLM Configuration (supports OpenAI, Chutes.ai, Ollama)
+LLM_MODEL=gpt-4o-mini
+# LLM_BASE_URL=https://custom-api.example.com/v1  # For alternative providers
+# LLM_API_KEY=your-custom-api-key
+
+# Embedding Configuration
+EMBEDDING_MODEL=text-embedding-3-small
+EMBEDDING_BATCH_SIZE=100
 
 # Optional
 LOG_LEVEL=INFO
 ```
+
+See `.env.example` for full configuration options.
 
 ### Frontend (.env.local)
 ```bash

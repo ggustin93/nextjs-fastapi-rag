@@ -26,11 +26,11 @@ Docling RAG Agent is an intelligent text-based CLI system that provides conversa
 └──────┬────────────────┬────────────────────┬─────────────────┘
        │                │                    │
 ┌──────▼──────┐  ┌─────▼─────┐  ┌──────────▼──────────┐
-│  OpenAI LLM │  │  OpenAI   │  │  Supabase/PGVector   │
-│   (GPT-4)   │  │ Embeddings│  │  • documents table   │
-│             │  │  (1536-d) │  │  • chunks table      │
-└─────────────┘  └───────────┘  │  • match_chunks()    │
-                                 └─────────────────────┘
+│ LLM Provider│  │ Embedding │  │  Supabase/PGVector   │
+│  (OpenAI,   │  │  Provider │  │  • documents table   │
+│ Chutes.ai,  │  │  (1536-d) │  │  • chunks table      │
+│  Ollama)    │  │           │  │  • match_chunks()    │
+└─────────────┘  └───────────┘  └─────────────────────┘
                                           ▲
 ┌─────────────────────────────────────────┘
 │              Ingestion Pipeline
@@ -225,7 +225,36 @@ db_pool = await asyncpg.create_pool(
 - Configuration schemas
 - API request/response types
 
-### 6. Database Schema (`sql/schema.sql`)
+### 6. Centralized Configuration (`packages/config/`)
+
+**Purpose**: Type-safe configuration management with environment variable support
+
+**Features**:
+- **Frozen Dataclasses**: Immutable configuration objects
+- **Multi-Provider Support**: OpenAI, Chutes.ai, Ollama, and any OpenAI-compatible API
+- **Singleton Pattern**: `@lru_cache` ensures consistent settings
+- **Domain-Specific Configs**: `LLMConfig`, `EmbeddingConfig`, `DatabaseConfig`, `ChunkingConfig`, `SearchConfig`, `APIConfig`
+
+**Usage**:
+```python
+from packages.config import settings
+
+# Create model with provider support
+agent = Agent(settings.llm.create_model())
+
+# Access domain configs
+batch_size = settings.embedding.batch_size
+pool_size = settings.database.pool_max_size
+```
+
+**Environment Variables** (see `.env.example`):
+- `LLM_BASE_URL`: Custom API endpoint for alternative providers
+- `LLM_MODEL`: Model name (default: `gpt-4o-mini`)
+- `EMBEDDING_BATCH_SIZE`: Batch size for embeddings (default: `100`)
+- `DB_POOL_MAX_SIZE`: Database connection pool size (default: `5`)
+- `CHUNK_SIZE`: Target chunk size in characters (default: `1000`)
+
+### 7. Database Schema (`sql/schema.sql`)
 
 #### Tables
 
@@ -468,9 +497,13 @@ Index Creation (PGVector)
 - Support proprietary formats
 
 ### 2. Alternative LLMs
-- Swap OpenAI for Anthropic, Cohere, or local models
-- Modify `packages/utils/providers.py` configuration
-- Adjust prompt templates
+The application supports multiple LLM providers via `packages/config/`:
+- **OpenAI**: Default configuration
+- **Chutes.ai**: Bittensor decentralized AI via `LLM_BASE_URL`
+- **Ollama**: Local models via `LLM_BASE_URL=http://localhost:11434/v1`
+- **Any OpenAI-compatible API**: Configure via `LLM_BASE_URL` and `LLM_API_KEY`
+
+Configure via environment variables (see `.env.example`)
 
 ### 3. Enhanced Search
 - Hybrid search (keyword + vector)

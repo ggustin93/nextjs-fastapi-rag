@@ -1,11 +1,11 @@
-# Osiris MultiRAG Agent - Project Context
+# nextjs-fastapi-rag - Project Context
 
 ## Overview
-RAG (Retrieval-Augmented Generation) agent for document Q&A using Docling for document processing and Supabase for vector storage.
+Full-stack RAG (Retrieval-Augmented Generation) application with Next.js frontend and FastAPI backend. Features document ingestion with Docling, semantic search via Supabase pgvector, and streaming chat responses.
 
 ## Project Structure
 ```
-osiris-multirag-agent/
+nextjs-fastapi-rag/
 ├── services/
 │   ├── api/                    # FastAPI backend
 │   │   ├── app/
