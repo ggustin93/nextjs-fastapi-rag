@@ -183,6 +183,17 @@ LLM_BASE_URL=https://api.openai.com/v1
 EMBEDDING_MODEL=text-embedding-3-small
 ```
 
+## Customization
+
+Customize the RAG agent's behavior via `RAG_SYSTEM_PROMPT` environment variable. See `.env.example` for examples (legal, medical, technical domains).
+
+```bash
+# Example: Legal domain
+export RAG_SYSTEM_PROMPT="Tu es un expert juridique belge..."
+```
+
+Default: Generic French knowledge assistant with numbered source citations.
+
 ## Design Decisions
 
 | Decision | Rationale |

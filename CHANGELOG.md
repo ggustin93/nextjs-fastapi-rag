@@ -11,8 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **RAG Relevance Scoring**: Search results now include visible pertinence scores
   - Results sorted by similarity (highest first)
-  - Citations format: `[Source: Title | Pertinence: 85%]`
-  - Configurable similarity threshold via `SEARCH_SIMILARITY_THRESHOLD` (default: 0.3)
+  - Numbered citations format: `[1]`, `[2]`, etc.
+  - Configurable similarity threshold via `SEARCH_SIMILARITY_THRESHOLD` (default: 0.4)
 - **Improved RAG Search Config**: Enhanced search defaults
   - Default result limit increased from 5 to 10 chunks
   - New `similarity_threshold` setting to filter low-quality matches
@@ -31,10 +31,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Supports depth-based crawling, URL pattern filtering, and concurrent page limits
   - Outputs markdown files with YAML frontmatter metadata
   - Generates crawl summaries for each source
-- **HyDE (Hypothetical Document Embedding)**: Query transformation in `packages/core/agent.py`
-  - Generates hypothetical document answer using GPT-4o-mini before embedding
-  - Improves semantic matching between queries and document chunks
-  - French-language prompt optimized for Brussels public space regulations
+- **Deterministic Query Reformulation**: Minimaliste query optimization in `packages/core/agent.py`
+  - Removes French question patterns (quelle est, comment, etc.) to improve semantic matching
+  - Preserves user vocabulary for better embedding alignment with document content
+  - No LLM call = no hallucination risk, no latency, no cost
+  - Example: "Quelle est la superficie maximale?" → "superficie maximale"
 - **Markdown Document Viewer**: Extended `DocumentViewer.tsx` for markdown support
   - Auto-detects file type (`.md` vs `.pdf`) and renders appropriately
   - Uses `ReactMarkdown` with `remark-gfm` for GitHub-flavored markdown
@@ -47,8 +48,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Explicit instructions to prioritize high-relevance results (>70%)
   - Must cite sources with pertinence scores
   - Never guess - only use information from knowledge base
-- **Similarity Search**: Now filters results below threshold before returning
-  - Logs filtered vs total results for debugging
+- **Similarity Search**: Server-side PostgreSQL filtering for efficiency
+  - Threshold passed directly to `match_chunks` function (no Python post-filtering)
+  - Default threshold increased from 0.3 → 0.4 for better result quality
+  - Logs result count above threshold for debugging
 - **Configuration Consolidation**: All hardcoded values now configurable via environment variables
   - Database pool settings: `DB_POOL_MIN_SIZE`, `DB_POOL_MAX_SIZE`, `DB_COMMAND_TIMEOUT`
   - Chunking parameters: `CHUNK_SIZE`, `CHUNK_OVERLAP`, `CHUNK_MAX_SIZE`, `CHUNK_MIN_SIZE`
