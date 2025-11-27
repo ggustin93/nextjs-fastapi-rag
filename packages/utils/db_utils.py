@@ -114,7 +114,9 @@ async def get_document(document_id: str) -> Optional[Dict[str, Any]]:
                 "title": result["title"],
                 "source": result["source"],
                 "content": result["content"],
-                "metadata": json.loads(result["metadata"]) if isinstance(result["metadata"], str) else result["metadata"],
+                "metadata": json.loads(result["metadata"])
+                if isinstance(result["metadata"], str)
+                else result["metadata"],
                 "created_at": result["created_at"].isoformat(),
                 "updated_at": result["updated_at"].isoformat(),
             }
@@ -178,7 +180,9 @@ async def list_documents(
                 "id": row["id"],
                 "title": row["title"],
                 "source": row["source"],
-                "metadata": json.loads(row["metadata"]) if isinstance(row["metadata"], str) else row["metadata"],
+                "metadata": json.loads(row["metadata"])
+                if isinstance(row["metadata"], str)
+                else row["metadata"],
                 "created_at": row["created_at"].isoformat(),
                 "updated_at": row["updated_at"].isoformat(),
                 "chunk_count": row["chunk_count"],

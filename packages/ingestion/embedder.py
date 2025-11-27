@@ -9,7 +9,7 @@ import asyncio
 import logging
 import os
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 from dotenv import load_dotenv
 from openai import APIError, RateLimitError
@@ -18,15 +18,16 @@ from .chunker import DocumentChunk
 
 # Import flexible providers and settings
 try:
-    from ..utils.providers import get_embedding_client, get_embedding_model
     from packages.config import settings
+
+    from ..utils.providers import get_embedding_client, get_embedding_model
 except ImportError:
     # For direct execution or testing
     import sys
 
     sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    from packages.utils.providers import get_embedding_client, get_embedding_model
     from packages.config import settings
+    from packages.utils.providers import get_embedding_client, get_embedding_model
 
 # Load environment variables
 load_dotenv()
@@ -69,8 +70,12 @@ class EmbeddingGenerator:
         # Use settings defaults if not provided
         self.model = model if model is not None else settings.embedding.model
         self.batch_size = batch_size if batch_size is not None else settings.embedding.batch_size
-        self.max_retries = max_retries if max_retries is not None else settings.embedding.max_retries
-        self.retry_delay = retry_delay if retry_delay is not None else settings.embedding.retry_delay
+        self.max_retries = (
+            max_retries if max_retries is not None else settings.embedding.max_retries
+        )
+        self.retry_delay = (
+            retry_delay if retry_delay is not None else settings.embedding.retry_delay
+        )
 
         # Lazy load embedding client when first needed
         self._client = None

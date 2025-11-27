@@ -38,7 +38,13 @@ class PerformanceMiddleware(BaseHTTPMiddleware):
     ):
         super().__init__(app)
         self.slow_request_threshold_ms = slow_request_threshold_ms
-        self.exclude_paths = exclude_paths or ["/health", "/favicon.ico", "/docs", "/redoc", "/openapi.json"]
+        self.exclude_paths = exclude_paths or [
+            "/health",
+            "/favicon.ico",
+            "/docs",
+            "/redoc",
+            "/openapi.json",
+        ]
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         """Process request and log timing."""

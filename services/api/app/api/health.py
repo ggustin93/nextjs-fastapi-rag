@@ -211,10 +211,7 @@ async def readiness(response: Response):
     openai_health = await check_openai_health()
 
     # Service is ready if database is healthy and OpenAI is configured
-    is_ready = (
-        db_health.status == "healthy"
-        and openai_health.status in ["healthy", "degraded"]
-    )
+    is_ready = db_health.status == "healthy" and openai_health.status in ["healthy", "degraded"]
 
     if not is_ready:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE

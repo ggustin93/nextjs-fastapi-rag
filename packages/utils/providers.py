@@ -7,8 +7,12 @@ from packages.config import settings
 
 def get_embedding_client() -> openai.AsyncOpenAI:
     """Get OpenAI-compatible client for embeddings."""
-    api_key = settings.embedding.api_key if hasattr(settings.embedding, 'api_key') else settings.llm.api_key
-    base_url = settings.embedding.base_url if hasattr(settings.embedding, 'base_url') else None
+    api_key = (
+        settings.embedding.api_key
+        if hasattr(settings.embedding, "api_key")
+        else settings.llm.api_key
+    )
+    base_url = settings.embedding.base_url if hasattr(settings.embedding, "base_url") else None
 
     if not api_key and not base_url:
         raise ValueError("LLM_API_KEY or OPENAI_API_KEY environment variable is required")

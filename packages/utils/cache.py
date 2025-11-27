@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class CacheStats:
     """Cache statistics."""
+
     hits: int = 0
     misses: int = 0
     evictions: int = 0

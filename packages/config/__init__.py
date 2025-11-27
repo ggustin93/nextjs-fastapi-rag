@@ -18,13 +18,13 @@ Environment Variables:
 
 # Load .env BEFORE any settings are read (must be first)
 from dotenv import load_dotenv
+
 load_dotenv()
 
-import os
-from dataclasses import dataclass, field
-from functools import lru_cache
-from typing import List, Optional, Union
-
+import os  # noqa: E402
+from dataclasses import dataclass, field  # noqa: E402
+from functools import lru_cache  # noqa: E402
+from typing import List, Optional, Union  # noqa: E402
 
 # Default RAG system prompt (can be overridden via RAG_SYSTEM_PROMPT env var)
 DEFAULT_SYSTEM_PROMPT = """Tu es un assistant intelligent avec accès à la base de connaissances de l'organisation.
@@ -70,21 +70,13 @@ class LLMConfig:
         RAG_SYSTEM_PROMPT="Tu es un expert juridique belge..."
     """
 
-    provider: str = field(
-        default_factory=lambda: os.getenv("LLM_PROVIDER", "openai")
-    )
+    provider: str = field(default_factory=lambda: os.getenv("LLM_PROVIDER", "openai"))
     model: str = field(
-        default_factory=lambda: os.getenv(
-            "LLM_MODEL", os.getenv("LLM_CHOICE", "gpt-4o-mini")
-        )
+        default_factory=lambda: os.getenv("LLM_MODEL", os.getenv("LLM_CHOICE", "gpt-4o-mini"))
     )
-    base_url: Optional[str] = field(
-        default_factory=lambda: os.getenv("LLM_BASE_URL")
-    )
+    base_url: Optional[str] = field(default_factory=lambda: os.getenv("LLM_BASE_URL"))
     api_key: Optional[str] = field(
-        default_factory=lambda: os.getenv(
-            "LLM_API_KEY", os.getenv("OPENAI_API_KEY")
-        )
+        default_factory=lambda: os.getenv("LLM_API_KEY", os.getenv("OPENAI_API_KEY"))
     )
     system_prompt: str = field(
         default_factory=lambda: os.getenv("RAG_SYSTEM_PROMPT", DEFAULT_SYSTEM_PROMPT)
@@ -152,20 +144,14 @@ class EmbeddingConfig:
     model: str = field(
         default_factory=lambda: os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
     )
-    base_url: Optional[str] = field(
-        default_factory=lambda: os.getenv("EMBEDDING_BASE_URL")
-    )
+    base_url: Optional[str] = field(default_factory=lambda: os.getenv("EMBEDDING_BASE_URL"))
     api_key: Optional[str] = field(
         default_factory=lambda: os.getenv(
             "EMBEDDING_API_KEY", os.getenv("LLM_API_KEY", os.getenv("OPENAI_API_KEY"))
         )
     )
-    batch_size: int = field(
-        default_factory=lambda: int(os.getenv("EMBEDDING_BATCH_SIZE", "100"))
-    )
-    max_retries: int = field(
-        default_factory=lambda: int(os.getenv("EMBEDDING_MAX_RETRIES", "3"))
-    )
+    batch_size: int = field(default_factory=lambda: int(os.getenv("EMBEDDING_BATCH_SIZE", "100")))
+    max_retries: int = field(default_factory=lambda: int(os.getenv("EMBEDDING_MAX_RETRIES", "3")))
     retry_delay: float = field(
         default_factory=lambda: float(os.getenv("EMBEDDING_RETRY_DELAY", "1.0"))
     )
@@ -190,15 +176,9 @@ class DatabaseConfig:
         DB_CONNECTION_TIMEOUT: Connection timeout in seconds (default: 30)
     """
 
-    pool_min_size: int = field(
-        default_factory=lambda: int(os.getenv("DB_POOL_MIN_SIZE", "1"))
-    )
-    pool_max_size: int = field(
-        default_factory=lambda: int(os.getenv("DB_POOL_MAX_SIZE", "5"))
-    )
-    command_timeout: int = field(
-        default_factory=lambda: int(os.getenv("DB_COMMAND_TIMEOUT", "60"))
-    )
+    pool_min_size: int = field(default_factory=lambda: int(os.getenv("DB_POOL_MIN_SIZE", "1")))
+    pool_max_size: int = field(default_factory=lambda: int(os.getenv("DB_POOL_MAX_SIZE", "5")))
+    command_timeout: int = field(default_factory=lambda: int(os.getenv("DB_COMMAND_TIMEOUT", "60")))
     connection_timeout: int = field(
         default_factory=lambda: int(os.getenv("DB_CONNECTION_TIMEOUT", "30"))
     )
@@ -216,21 +196,11 @@ class ChunkingConfig:
         CHUNK_MAX_TOKENS: Maximum tokens per chunk (default: 512)
     """
 
-    chunk_size: int = field(
-        default_factory=lambda: int(os.getenv("CHUNK_SIZE", "1000"))
-    )
-    chunk_overlap: int = field(
-        default_factory=lambda: int(os.getenv("CHUNK_OVERLAP", "200"))
-    )
-    max_chunk_size: int = field(
-        default_factory=lambda: int(os.getenv("CHUNK_MAX_SIZE", "2000"))
-    )
-    min_chunk_size: int = field(
-        default_factory=lambda: int(os.getenv("CHUNK_MIN_SIZE", "100"))
-    )
-    max_tokens: int = field(
-        default_factory=lambda: int(os.getenv("CHUNK_MAX_TOKENS", "512"))
-    )
+    chunk_size: int = field(default_factory=lambda: int(os.getenv("CHUNK_SIZE", "1000")))
+    chunk_overlap: int = field(default_factory=lambda: int(os.getenv("CHUNK_OVERLAP", "200")))
+    max_chunk_size: int = field(default_factory=lambda: int(os.getenv("CHUNK_MAX_SIZE", "2000")))
+    min_chunk_size: int = field(default_factory=lambda: int(os.getenv("CHUNK_MIN_SIZE", "100")))
+    max_tokens: int = field(default_factory=lambda: int(os.getenv("CHUNK_MAX_TOKENS", "512")))
 
 
 @dataclass(frozen=True)
@@ -243,12 +213,8 @@ class SearchConfig:
         SEARCH_SIMILARITY_THRESHOLD: Minimum similarity score (default: 0.3)
     """
 
-    default_limit: int = field(
-        default_factory=lambda: int(os.getenv("SEARCH_DEFAULT_LIMIT", "10"))
-    )
-    max_limit: int = field(
-        default_factory=lambda: int(os.getenv("SEARCH_MAX_LIMIT", "50"))
-    )
+    default_limit: int = field(default_factory=lambda: int(os.getenv("SEARCH_DEFAULT_LIMIT", "10")))
+    max_limit: int = field(default_factory=lambda: int(os.getenv("SEARCH_MAX_LIMIT", "50")))
     similarity_threshold: float = field(
         default_factory=lambda: float(os.getenv("SEARCH_SIMILARITY_THRESHOLD", "0.4"))
     )

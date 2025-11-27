@@ -106,9 +106,7 @@ async def close_db():
         logger.info("Supabase REST client closed")
 
 
-async def search_knowledge_base(
-    ctx: RunContext[None], query: str, limit: int | None = None
-) -> str:
+async def search_knowledge_base(ctx: RunContext[None], query: str, limit: int | None = None) -> str:
     """
     Search the knowledge base using semantic similarity.
 
@@ -179,7 +177,10 @@ async def search_knowledge_base(
         if not response_parts:
             return "Des résultats ont été trouvés mais ils ne semblent pas directement pertinents. Essayez de reformuler votre question."
 
-        return f"Trouvé {len(response_parts)} résultats pertinents (triés par pertinence):\n\n" + "\n---\n".join(response_parts)
+        return (
+            f"Trouvé {len(response_parts)} résultats pertinents (triés par pertinence):\n\n"
+            + "\n---\n".join(response_parts)
+        )
 
     except Exception as e:
         logger.error(f"Knowledge base search failed: {e}", exc_info=True)

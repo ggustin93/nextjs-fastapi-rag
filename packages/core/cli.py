@@ -65,9 +65,7 @@ async def close_db():
         logger.debug("Database connection pool closed")
 
 
-async def search_knowledge_base(
-    ctx: RunContext[None], query: str, limit: int | None = None
-) -> str:
+async def search_knowledge_base(ctx: RunContext[None], query: str, limit: int | None = None) -> str:
     """
     Search the knowledge base using semantic similarity.
 

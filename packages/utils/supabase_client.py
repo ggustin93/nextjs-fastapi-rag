@@ -254,11 +254,7 @@ class SupabaseRestClient:
         # Fetch from database
         try:
             response = (
-                self.client.table("documents")
-                .select("*")
-                .eq("id", document_id)
-                .single()
-                .execute()
+                self.client.table("documents").select("*").eq("id", document_id).single().execute()
             )
 
             if response.data:
@@ -296,11 +292,7 @@ class SupabaseRestClient:
         # Fetch from database
         try:
             response = (
-                self.client.table("documents")
-                .select("*")
-                .eq("source", source)
-                .single()
-                .execute()
+                self.client.table("documents").select("*").eq("source", source).single().execute()
             )
 
             if response.data:
@@ -349,9 +341,7 @@ class SupabaseRestClient:
 
         return result
 
-    async def execute_rpc(
-        self, function_name: str, params: Dict[str, Any]
-    ) -> Optional[Any]:
+    async def execute_rpc(self, function_name: str, params: Dict[str, Any]) -> Optional[Any]:
         """
         Execute a Supabase RPC function.
 
