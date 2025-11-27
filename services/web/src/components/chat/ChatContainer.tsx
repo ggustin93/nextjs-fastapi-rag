@@ -3,14 +3,25 @@
 import { useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Trash2 } from 'lucide-react';
+import { Trash2, MessageSquare } from 'lucide-react';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
 import { useChat } from '@/hooks/useChat';
+import type { Source } from '@/types/chat';
 
-export function ChatContainer() {
+interface ChatContainerProps {
+  onOpenDocument?: (source: Source) => void;
+}
+
+export function ChatContainer({ onOpenDocument }: ChatContainerProps) {
   const { messages, isLoading, error, sendMessage, clearMessages } = useChat();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const suggestedPrompts = [
+    "What are the key findings in the latest report?",
+    "Summarize the main conclusions from the documents",
+    "Find information about a specific topic"
+  ];
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -18,7 +29,7 @@ export function ChatContainer() {
   }, [messages]);
 
   return (
-    <Card className="w-full max-w-4xl mx-auto h-[80vh] flex flex-col">
+    <Card className="w-full h-full flex flex-col">
       <CardHeader className="flex flex-row items-center justify-between flex-shrink-0">
         <CardTitle>Docling RAG Agent</CardTitle>
         {messages.length > 0 && (
@@ -34,21 +45,53 @@ export function ChatContainer() {
         )}
       </CardHeader>
 
-      <CardContent className="flex-1 flex flex-col gap-4 overflow-hidden min-h-0 p-0 px-6 pb-6">
+      <CardContent className="flex-1 flex flex-col overflow-hidden p-0">
         {/* Scrollable messages area */}
-        <div className="flex-1 overflow-y-auto min-h-0 pr-4">
+        <div className="flex-1 overflow-y-auto px-6 pt-6 pb-4">
           {messages.length === 0 ? (
-            <div className="flex items-center justify-center h-full text-muted-foreground">
-              <p>Start a conversation with the RAG agent</p>
+            <div className="flex flex-col items-center justify-center h-full gap-6 px-8 animate-in fade-in duration-500">
+              {/* Icon */}
+              <div className="rounded-full bg-primary/10 p-6">
+                <MessageSquare className="h-12 w-12 text-primary" />
+              </div>
+
+              {/* Title + Description */}
+              <div className="text-center space-y-2 max-w-md">
+                <h2 className="text-xl font-semibold">Welcome to RAG Agent</h2>
+                <p className="text-muted-foreground text-sm">
+                  Ask questions about your documents and get AI-powered answers with sources
+                </p>
+              </div>
+
+              {/* Suggested Prompts */}
+              <div className="grid grid-cols-1 gap-2 w-full max-w-md">
+                {suggestedPrompts.map((prompt, i) => (
+                  <button
+                    key={i}
+                    onClick={() => sendMessage(prompt)}
+                    className="text-left px-4 py-3 rounded-lg border border-border bg-card hover:bg-accent transition-colors text-sm animate-in fade-in slide-in-from-left-2 duration-300"
+                    style={{ animationDelay: `${i * 75}ms` }}
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </div>
             </div>
           ) : (
-            <div className="space-y-4 py-4">
+            <div className="space-y-3">
               {messages.map((message, index) => (
-                <ChatMessage key={index} message={message} />
+                <div key={index} className="animate-in slide-in-from-bottom-2 fade-in duration-300">
+                  <ChatMessage message={message} onOpenDocument={onOpenDocument} />
+                </div>
               ))}
               {isLoading && (
-                <div className="flex items-center gap-2 text-muted-foreground text-sm">
-                  <div className="animate-pulse">Thinking...</div>
+                <div className="flex items-center gap-2 text-muted-foreground text-sm animate-in fade-in duration-200">
+                  <div className="flex gap-1">
+                    <span className="h-2 w-2 bg-current rounded-full animate-bounce [animation-delay:-0.3s]" />
+                    <span className="h-2 w-2 bg-current rounded-full animate-bounce [animation-delay:-0.15s]" />
+                    <span className="h-2 w-2 bg-current rounded-full animate-bounce" />
+                  </div>
+                  <span>Thinking...</span>
                 </div>
               )}
               {/* Invisible element to scroll to */}
@@ -58,7 +101,7 @@ export function ChatContainer() {
         </div>
 
         {error && (
-          <div className="bg-destructive/10 text-destructive px-4 py-2 rounded-md text-sm flex-shrink-0">
+          <div className="bg-destructive/10 text-destructive px-6 py-2 text-sm flex-shrink-0">
             {error}
           </div>
         )}

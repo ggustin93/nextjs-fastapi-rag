@@ -3,16 +3,17 @@
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
-import type { ChatMessage as ChatMessageType } from '@/types/chat';
+import type { ChatMessage as ChatMessageType, Source } from '@/types/chat';
 import { SourcesList } from './DocumentViewer';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 interface ChatMessageProps {
   message: ChatMessageType;
+  onOpenDocument?: (source: Source) => void;
 }
 
-export function ChatMessage({ message }: ChatMessageProps) {
+export function ChatMessage({ message, onOpenDocument }: ChatMessageProps) {
   const isUser = message.role === 'user';
 
   return (
@@ -132,7 +133,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
         )}
 
         {!isUser && message.sources && message.sources.length > 0 && (
-          <SourcesList sources={message.sources} />
+          <SourcesList sources={message.sources} onOpenDocument={onOpenDocument} />
         )}
       </Card>
 
