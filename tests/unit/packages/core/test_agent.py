@@ -55,13 +55,13 @@ class TestDatabaseInitialization:
 
         agent_mod.rest_client = None
 
-        with patch("packages.core.agent.SupabaseRestClient") as MockClient:
+        with patch("packages.core.agent.SupabaseRestClient") as mock_client:
             mock_instance = AsyncMock()
-            MockClient.return_value = mock_instance
+            mock_client.return_value = mock_instance
 
             await agent_mod.initialize_db()
 
-            MockClient.assert_called_once()
+            mock_client.assert_called_once()
             mock_instance.initialize.assert_awaited_once()
 
     @pytest.mark.asyncio
