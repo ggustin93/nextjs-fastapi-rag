@@ -17,12 +17,6 @@ export function ChatContainer({ onOpenDocument }: ChatContainerProps) {
   const { messages, isLoading, error, sendMessage, clearMessages } = useChat();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const suggestedPrompts = [
-    "What are the key findings in the latest report?",
-    "Summarize the main conclusions from the documents",
-    "Find information about a specific topic"
-  ];
-
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -31,7 +25,7 @@ export function ChatContainer({ onOpenDocument }: ChatContainerProps) {
   return (
     <Card className="w-full h-full flex flex-col">
       <CardHeader className="flex flex-row items-center justify-between flex-shrink-0">
-        <CardTitle>Docling RAG Agent</CardTitle>
+        <CardTitle>Agent RAG Docling</CardTitle>
         {messages.length > 0 && (
           <Button
             variant="outline"
@@ -40,7 +34,7 @@ export function ChatContainer({ onOpenDocument }: ChatContainerProps) {
             disabled={isLoading}
           >
             <Trash2 className="h-4 w-4 mr-2" />
-            Clear Chat
+            Effacer la conversation
           </Button>
         )}
       </CardHeader>
@@ -57,24 +51,10 @@ export function ChatContainer({ onOpenDocument }: ChatContainerProps) {
 
               {/* Title + Description */}
               <div className="text-center space-y-2 max-w-md">
-                <h2 className="text-xl font-semibold">Welcome to RAG Agent</h2>
+                <h2 className="text-xl font-semibold">Bienvenue sur l'Agent RAG</h2>
                 <p className="text-muted-foreground text-sm">
-                  Ask questions about your documents and get AI-powered answers with sources
+                  Posez des questions sur vos documents et obtenez des réponses IA avec sources
                 </p>
-              </div>
-
-              {/* Suggested Prompts */}
-              <div className="grid grid-cols-1 gap-2 w-full max-w-md">
-                {suggestedPrompts.map((prompt, i) => (
-                  <button
-                    key={i}
-                    onClick={() => sendMessage(prompt)}
-                    className="text-left px-4 py-3 rounded-lg border border-border bg-card hover:bg-accent transition-colors text-sm animate-in fade-in slide-in-from-left-2 duration-300"
-                    style={{ animationDelay: `${i * 75}ms` }}
-                  >
-                    {prompt}
-                  </button>
-                ))}
               </div>
             </div>
           ) : (
@@ -91,7 +71,7 @@ export function ChatContainer({ onOpenDocument }: ChatContainerProps) {
                     <span className="h-2 w-2 bg-current rounded-full animate-bounce [animation-delay:-0.15s]" />
                     <span className="h-2 w-2 bg-current rounded-full animate-bounce" />
                   </div>
-                  <span>Thinking...</span>
+                  <span>Réflexion en cours...</span>
                 </div>
               )}
               {/* Invisible element to scroll to */}

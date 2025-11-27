@@ -122,6 +122,16 @@ async def search_knowledge_base(ctx: RunContext[None], query: str, limit: int | 
 
     similarity_threshold = settings.search.similarity_threshold
 
+    # DEBUG: Log search initiation
+    logger.info(
+        "RAG search initiated",
+        extra={
+            "original_query": query,
+            "limit": limit,
+            "similarity_threshold": similarity_threshold,
+        },
+    )
+
     try:
         # Ensure database is initialized
         if not rest_client:
@@ -130,6 +140,7 @@ async def search_knowledge_base(ctx: RunContext[None], query: str, limit: int | 
         # Reformulate query for better semantic matching
         # Converts "Quelle est la superficie..." → "la valeur de la superficie..."
         search_query = reformulate_query(query)
+        logger.debug(f"Query reformulated: '{query}' → '{search_query}'")
 
         # Generate embedding for reformulated query
         from packages.ingestion.embedder import create_embedder
@@ -144,19 +155,58 @@ async def search_knowledge_base(ctx: RunContext[None], query: str, limit: int | 
             similarity_threshold=similarity_threshold,
         )
 
+        # DEBUG: Log retrieval results
+        logger.info(
+            "RAG chunks retrieved",
+            extra={
+                "chunks_found": len(results),
+                "avg_similarity": (
+                    sum(r.get("similarity", 0) for r in results) / len(results) if results else 0
+                ),
+                "max_similarity": max((r.get("similarity", 0) for r in results), default=0),
+                "min_similarity": min((r.get("similarity", 0) for r in results), default=0),
+            },
+        )
+
         # Format results for response
         if not results:
+            logger.warning("No chunks found matching similarity threshold")
             return "Aucune information pertinente trouvée dans la base de connaissances pour cette requête."
 
         # Sort results by similarity (highest first)
         sorted_results = sorted(results, key=lambda x: x.get("similarity", 0), reverse=True)
 
-        # Build response with sources and track them globally
+        # Deduplicate by document source (keep highest similarity per document)
+        seen_documents = {}
+        deduped_results = []
+        for row in sorted_results:
+            doc_source = row["document_source"]
+            if doc_source not in seen_documents:
+                seen_documents[doc_source] = True
+                deduped_results.append(row)
+
+        logger.info(
+            f"Deduplicated sources: {len(results)} chunks → {len(deduped_results)} unique documents"
+        )
+
+        # DEBUG: Log chunk details
+        for idx, row in enumerate(deduped_results[:3]):  # Log first 3 deduped chunks
+            logger.debug(
+                f"Chunk {idx + 1} details",
+                extra={
+                    "similarity": row.get("similarity"),
+                    "content_length": len(row.get("content", "")),
+                    "document": row.get("document_title"),
+                    "content_preview": row.get("content", "")[:100] + "...",
+                },
+            )
+
+        # Build response with deduplicated sources and track them globally
         global last_search_sources
         response_parts = []
         sources_tracked = []
 
-        for index, row in enumerate(sorted_results):
+        for index, row in enumerate(deduped_results):
             similarity = row["similarity"]
             content = row["content"]
             doc_title = row["document_title"]
@@ -167,20 +217,42 @@ async def search_knowledge_base(ctx: RunContext[None], query: str, limit: int | 
                 {"title": doc_title, "path": doc_source, "similarity": similarity}
             )
 
-            # Use numbered reference [1], [2], etc. for citation
+            # Use numbered reference [1], [2], etc. with source metadata
             source_ref = f"[{index + 1}]"
-            response_parts.append(f"{source_ref}\n{content}\n")
+            similarity_pct = int(similarity * 100)
+
+            # Add similarity warning for low-confidence chunks
+            confidence_marker = ""
+            if similarity < 0.6:
+                confidence_marker = " - FAIBLE"
+
+            # Format with document title and similarity score
+            response_parts.append(
+                f"{source_ref} Source: \"{doc_title}\" (Pertinence: {similarity_pct}%{confidence_marker})\n{content}\n"
+            )
 
         # Store sources globally for retrieval
         last_search_sources = sources_tracked
 
         if not response_parts:
+            logger.warning("Chunks found but response_parts is empty")
             return "Des résultats ont été trouvés mais ils ne semblent pas directement pertinents. Essayez de reformuler votre question."
 
-        return (
+        # DEBUG: Log final formatted response
+        formatted_response = (
             f"Trouvé {len(response_parts)} résultats pertinents (triés par pertinence):\n\n"
             + "\n---\n".join(response_parts)
         )
+        logger.info(
+            "RAG tool return value",
+            extra={
+                "response_length": len(formatted_response),
+                "num_sources": len(response_parts),
+                "response_preview": formatted_response[:200] + "...",
+            },
+        )
+
+        return formatted_response
 
     except Exception as e:
         logger.error(f"Knowledge base search failed: {e}", exc_info=True)

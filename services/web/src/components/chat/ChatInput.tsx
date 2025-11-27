@@ -3,7 +3,7 @@
 import { useState, KeyboardEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Send } from 'lucide-react';
+import { Send, Loader2 } from 'lucide-react';
 
 interface ChatInputProps {
   onSend: (message: string) => void;
@@ -28,21 +28,26 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
   };
 
   return (
-    <div className="flex gap-2">
+    <div className="flex gap-3 border-t border-border bg-background shadow-lg px-4 py-4">
       <Input
         value={input}
         onChange={(e) => setInput(e.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder="Type your message..."
+        placeholder="Écrivez votre message..."
         disabled={disabled}
-        className="flex-1"
+        className="flex-1 h-11 text-base"
       />
       <Button
         onClick={handleSend}
         disabled={disabled || !input.trim()}
-        size="icon"
+        size="icon-lg"
+        className="group transition-all duration-150 ease-in-out hover:scale-105 active:scale-95 shrink-0"
       >
-        <Send className="h-4 w-4" />
+        {disabled ? (
+          <Loader2 className="h-5 w-5 animate-spin" />
+        ) : (
+          <Send className="h-5 w-5 group-hover:translate-x-0.5 transition-transform" />
+        )}
       </Button>
     </div>
   );

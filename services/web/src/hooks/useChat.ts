@@ -63,18 +63,9 @@ export function useChat() {
               }
             });
           } else if (event.type === 'sources' && event.sources) {
-            // Deduplicate sources by path, keeping highest similarity
-            const deduped = event.sources.reduce((acc: Source[], source: Source) => {
-              const existing = acc.find(s => s.path === source.path);
-              if (!existing) {
-                return [...acc, source];
-              } else if (source.similarity > existing.similarity) {
-                return acc.map(s => s.path === source.path ? source : s);
-              }
-              return acc;
-            }, [] as Source[]);
-
-            assistantSources = deduped;
+            // Backend already deduplicates sources by document path
+            // No need to deduplicate again on frontend
+            assistantSources = event.sources;
 
             // Update the assistant message with sources
             setMessages((prev) => {

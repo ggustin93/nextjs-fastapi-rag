@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 
 // Import react-pdf styles for TextLayer and AnnotationLayer
 import 'react-pdf/dist/Page/TextLayer.css';
@@ -39,9 +40,12 @@ const isMarkdownFile = (path: string) => /\.(md|markdown)$/i.test(path);
 interface DocumentViewerProps {
   source: Source;
   index?: number;  // Optional numbered reference [1], [2], etc.
+  onOpenDocument?: (source: Source) => void;
 }
 
-export function DocumentViewer({ source, index }: DocumentViewerProps) {
+export function DocumentViewer({ source, index, onOpenDocument }: DocumentViewerProps) {
+  // Detect desktop (768px = md breakpoint)
+  const isDesktop = useMediaQuery('(min-width: 768px)');
   const [numPages, setNumPages] = useState<number>(0);
   const [pageNumber, setPageNumber] = useState<number>(1);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -221,6 +225,28 @@ export function DocumentViewer({ source, index }: DocumentViewerProps) {
     return null;
   };
 
+  // Desktop: Button that triggers side panel
+  if (isDesktop && onOpenDocument) {
+    return (
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-auto py-1 px-2 text-xs hover:bg-muted"
+        onClick={() => onOpenDocument(source)}
+      >
+        {index !== undefined && (
+          <span className="font-mono text-muted-foreground mr-1">[{index}]</span>
+        )}
+        <FileText className="h-3 w-3 mr-1" />
+        {source.title}
+        <Badge variant="secondary" className="ml-2 text-[10px] px-1">
+          {similarityPercent}%
+        </Badge>
+      </Button>
+    );
+  }
+
+  // Mobile: Dialog modal (existing behavior)
   return (
     <Dialog onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
@@ -325,9 +351,10 @@ export function DocumentViewer({ source, index }: DocumentViewerProps) {
 
 interface SourcesListProps {
   sources: Source[];
+  onOpenDocument?: (source: Source) => void;
 }
 
-export function SourcesList({ sources }: SourcesListProps) {
+export function SourcesList({ sources, onOpenDocument }: SourcesListProps) {
   if (!sources || sources.length === 0) return null;
 
   return (
@@ -335,7 +362,12 @@ export function SourcesList({ sources }: SourcesListProps) {
       <p className="text-xs text-muted-foreground mb-2">Sources consultées:</p>
       <div className="flex flex-wrap gap-1">
         {sources.map((source, index) => (
-          <DocumentViewer key={index} source={source} index={index + 1} />
+          <DocumentViewer
+            key={index}
+            source={source}
+            index={index + 1}
+            onOpenDocument={onOpenDocument}
+          />
         ))}
       </div>
     </div>
