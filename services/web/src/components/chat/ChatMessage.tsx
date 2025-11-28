@@ -8,6 +8,48 @@ import { SourcesList } from './DocumentViewer';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
+/**
+ * Filter and sort sources to show:
+ * 1. All cited sources (from [1], [2], etc. in response)
+ * 2. Top 3 sources by similarity (backend already sorted)
+ * 3. Deduplicate by path, maintain similarity order
+ *
+ * Optimized: O(n) single-pass algorithm, leverages backend pre-sorting
+ */
+function filterAndSortSources(
+  sources: Source[],
+  citedIndices: number[]
+): Source[] {
+  if (!sources?.length) return [];
+
+  const citedSet = new Set(citedIndices);
+  const seenPaths = new Map<string, Source>();
+  const MAX_TOP_SOURCES = 3;
+
+  // Backend already sorts by similarity desc - maintain order
+  // Single pass: add cited sources + top 3 unique sources
+  for (let i = 0; i < sources.length; i++) {
+    const source = sources[i];
+    const isCited = citedSet.has(i + 1);
+
+    // Skip duplicates (keep first = highest similarity)
+    if (seenPaths.has(source.path)) continue;
+
+    // Add if cited OR if we need more top sources
+    if (isCited || seenPaths.size < MAX_TOP_SOURCES) {
+      seenPaths.set(source.path, source);
+    }
+
+    // Early exit: have all cited + enough top sources
+    if (citedSet.size > 0 && seenPaths.size >= Math.max(citedSet.size, MAX_TOP_SOURCES)) {
+      break;
+    }
+  }
+
+  // Already in similarity order due to backend sorting
+  return Array.from(seenPaths.values());
+}
+
 interface ChatMessageProps {
   message: ChatMessageType;
   onOpenDocument?: (source: Source) => void;
@@ -15,6 +57,12 @@ interface ChatMessageProps {
 
 export function ChatMessage({ message, onOpenDocument }: ChatMessageProps) {
   const isUser = message.role === 'user';
+
+  // Filter and sort sources before rendering
+  const displaySources = filterAndSortSources(
+    message.sources || [],
+    message.citedIndices || []
+  );
 
   return (
     <div
@@ -132,8 +180,8 @@ export function ChatMessage({ message, onOpenDocument }: ChatMessageProps) {
           </div>
         )}
 
-        {!isUser && message.sources && message.sources.length > 0 && (
-          <SourcesList sources={message.sources} onOpenDocument={onOpenDocument} />
+        {!isUser && displaySources.length > 0 && (
+          <SourcesList sources={displaySources} onOpenDocument={onOpenDocument} />
         )}
       </Card>
 

@@ -15,6 +15,15 @@ export function ChatLayout() {
   const isDesktop = useMediaQuery('(min-width: 768px)');
 
   const handleOpenDocument = (source: Source) => {
+    // Clear any cached panel sizes to ensure 50/50 split
+    if (typeof window !== 'undefined') {
+      const keys = Object.keys(localStorage);
+      keys.forEach(key => {
+        if (key.includes('react-resizable-panels') && key.includes('chat-document-panels')) {
+          localStorage.removeItem(key);
+        }
+      });
+    }
     setCurrentDocument(source);
     setIsDocumentPanelOpen(true);
   };
@@ -31,15 +40,14 @@ export function ChatLayout() {
       <div className="h-screen w-screen flex">
         <ResizablePanelGroup
           direction="horizontal"
-          autoSaveId="chat-document-panels"
         >
           {/* Chat Panel - always rendered to preserve state */}
           <ResizablePanel
             id="chat-panel"
             order={1}
-            defaultSize={isDocumentPanelOpen ? 50 : 100}
-            minSize={isDocumentPanelOpen ? 30 : 100}
-            maxSize={isDocumentPanelOpen ? 70 : 100}
+            defaultSize={isDocumentPanelOpen ? 30 : 100}
+            minSize={isDocumentPanelOpen ? 20 : 100}
+            maxSize={isDocumentPanelOpen ? 50 : 100}
             className={isDocumentPanelOpen ? 'px-6' : 'flex items-center justify-center px-8'}
           >
             <div className={isDocumentPanelOpen ? 'h-full' : 'w-full max-w-4xl h-[80vh]'}>
@@ -57,11 +65,11 @@ export function ChatLayout() {
           <ResizablePanel
             id="document-panel"
             order={2}
-            defaultSize={50}
+            defaultSize={70}
             collapsedSize={0}
             collapsible={true}
-            minSize={30}
-            maxSize={70}
+            minSize={50}
+            maxSize={80}
             className={isDocumentPanelOpen ? '' : 'hidden'}
           >
             {currentDocument && (

@@ -32,6 +32,7 @@ export function useChat() {
     // Prepare assistant message
     let assistantContent = '';
     let assistantSources: Source[] = [];
+    let citedIndices: number[] = [];
 
     try {
       await streamChat(
@@ -51,6 +52,7 @@ export function useChat() {
                   ...lastMessage,
                   content: assistantContent,
                   sources: assistantSources,
+                  citedIndices,
                 });
               } else {
                 // Create new assistant message
@@ -59,21 +61,23 @@ export function useChat() {
                   content: assistantContent,
                   timestamp: new Date(),
                   sources: assistantSources,
+                  citedIndices,
                 });
               }
             });
           } else if (event.type === 'sources' && event.sources) {
-            // Backend already deduplicates sources by document path
-            // No need to deduplicate again on frontend
+            // Capture sources and cited indices from backend
             assistantSources = event.sources;
+            citedIndices = event.cited_indices || [];
 
-            // Update the assistant message with sources
+            // Update the assistant message with sources and cited indices
             setMessages((prev) => {
               const lastMessage = prev[prev.length - 1];
               if (lastMessage && lastMessage.role === 'assistant') {
                 return prev.slice(0, -1).concat({
                   ...lastMessage,
                   sources: assistantSources,
+                  citedIndices,
                 });
               }
               return prev;

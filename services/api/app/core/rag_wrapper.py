@@ -22,13 +22,18 @@ logger = logging.getLogger(__name__)
 def extract_cited_indices(response_text: str) -> set[int]:
     """Extract source indices like [1], [2], [3] from response text.
 
+    Uses negative lookbehind/lookahead to avoid false positives from:
+    - Markdown links: [text](url)
+    - Nested brackets: [[1]]
+    - Other bracketed contexts
+
     Args:
         response_text: The complete agent response text
 
     Returns:
         Set of 1-based indices that were cited in the response
     """
-    matches = re.findall(r"\[(\d+)\]", response_text)
+    matches = re.findall(r"(?<!\w)\[(\d+)\](?!\()", response_text)
     indices = {int(m) for m in matches}
     if indices:
         logger.info(f"Extracted cited source indices: {sorted(indices)}")

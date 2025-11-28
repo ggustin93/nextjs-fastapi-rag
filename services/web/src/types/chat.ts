@@ -9,7 +9,7 @@ export interface Source {
     category?: string;
     language?: string;
     crawled_at?: string;
-    [key: string]: any;
+    [key: string]: unknown;  // Allow additional metadata fields with unknown type
   };
   // PDF page number support
   page_number?: number;      // First page (for auto-scroll)
@@ -21,6 +21,7 @@ export interface ChatMessage {
   content: string;
   timestamp: Date;
   sources?: Source[];
+  citedIndices?: number[];  // 1-based indices of sources cited in response
 }
 
 export interface ChatRequest {
@@ -32,4 +33,5 @@ export interface StreamEvent {
   type: 'token' | 'done' | 'error' | 'sources';
   content: string;
   sources?: Source[];
+  cited_indices?: number[];  // 1-based indices from backend (snake_case from API)
 }

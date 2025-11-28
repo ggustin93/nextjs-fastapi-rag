@@ -72,8 +72,8 @@ export function DocumentContent({ source }: { source: Source; showControls?: boo
           setMdContent(text);
           setIsLoading(false);
         }
-      } catch (err: any) {
-        if (err.name !== 'AbortError') {
+      } catch (err) {
+        if (err instanceof Error && err.name !== 'AbortError') {
           console.error(err);
           setError(err.message);
           setIsLoading(false);

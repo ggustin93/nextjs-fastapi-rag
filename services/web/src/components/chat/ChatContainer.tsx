@@ -51,7 +51,7 @@ export function ChatContainer({ onOpenDocument }: ChatContainerProps) {
 
               {/* Title + Description */}
               <div className="text-center space-y-2 max-w-md">
-                <h2 className="text-xl font-semibold">Bienvenue sur l'Agent RAG</h2>
+                <h2 className="text-xl font-semibold">Bienvenue sur l&apos;Agent RAG</h2>
                 <p className="text-muted-foreground text-sm">
                   Posez des questions sur vos documents et obtenez des réponses IA avec sources
                 </p>

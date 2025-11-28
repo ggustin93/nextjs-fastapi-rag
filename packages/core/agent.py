@@ -70,6 +70,7 @@ class RAGContext:
     reranker: Optional[Any] = None
     domain_config: Optional[DomainConfig] = None
     last_search_sources: list = field(default_factory=list)
+    cited_source_indices: set[int] = field(default_factory=set)
     # External API configs can be added optionally:
     # external_api_config: Optional[ExternalAPIConfig] = None
 
@@ -505,7 +506,9 @@ async def search_knowledge_base(
 
             # Extract page information from chunk metadata (for PDFs)
             chunk_metadata = row.get("metadata", {})
-            page_start = chunk_metadata.get("page_start") if isinstance(chunk_metadata, dict) else None
+            page_start = (
+                chunk_metadata.get("page_start") if isinstance(chunk_metadata, dict) else None
+            )
             page_end = chunk_metadata.get("page_end") if isinstance(chunk_metadata, dict) else None
 
             # Build source object

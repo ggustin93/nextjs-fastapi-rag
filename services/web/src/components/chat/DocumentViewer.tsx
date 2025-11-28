@@ -8,7 +8,7 @@ import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { FileText, ChevronLeft, ChevronRight, Loader2, ZoomIn, ZoomOut, Maximize2, Globe2, FileType, FileCode } from 'lucide-react';
+import { FileText, ChevronLeft, ChevronRight, ChevronDown, Loader2, ZoomIn, ZoomOut, Maximize2, Globe2, FileType, FileCode } from 'lucide-react';
 import type { Source } from '@/types/chat';
 import { IframeViewer } from './IframeViewer';
 
@@ -188,41 +188,24 @@ export function DocumentViewer({ source, index, onOpenDocument }: DocumentViewer
     return null;
   };
 
-  // Helper function to get document type badge
-  const getDocumentBadge = () => {
+  // Helper function to get single type-specific icon
+  const getTypeIcon = () => {
     if (source.url) {
-      return (
-        <Badge variant="secondary" className="ml-1 text-[10px] px-1 gap-0.5">
-          <Globe2 className="h-2.5 w-2.5" />
-          Web
-        </Badge>
-      );
+      return <Globe2 className="h-3 w-3 mr-1 text-blue-500" />;
     }
     if (isPdf) {
-      const pageInfo = source.page_range ? ` (${source.page_range})` : '';
-      return (
-        <Badge variant="secondary" className="ml-1 text-[10px] px-1 gap-0.5">
-          <FileType className="h-2.5 w-2.5" />
-          PDF{pageInfo}
-        </Badge>
-      );
+      return <FileType className="h-3 w-3 mr-1 text-red-500" />;
     }
-    return (
-      <Badge variant="secondary" className="ml-1 text-[10px] px-1 gap-0.5">
-        <FileCode className="h-2.5 w-2.5" />
-        Doc
-      </Badge>
-    );
+    return <FileCode className="h-3 w-3 mr-1 text-green-500" />;
   };
 
   // Button Trigger
   const TriggerButton = (
-    <Button variant="ghost" size="sm" className="h-auto py-1 px-2 text-xs hover:bg-muted" onClick={() => isDesktop && onOpenDocument?.(source)}>
-      {index && <span className="font-mono text-muted-foreground mr-1">[{index}]</span>}
-      <FileText className="h-3 w-3 mr-1" />
-      {source.title}
-      {getDocumentBadge()}
-      <Badge variant="secondary" className="ml-1 text-[10px] px-1">{Math.round(source.similarity * 100)}%</Badge>
+    <Button variant="ghost" size="sm" className="h-auto py-0.5 px-1.5 text-[11px] hover:bg-muted" onClick={() => isDesktop && onOpenDocument?.(source)}>
+      {index && <span className="font-mono text-muted-foreground mr-1 text-[10px]">[{index}]</span>}
+      {getTypeIcon()}
+      <span className="truncate max-w-[200px]">{source.title}</span>
+      <Badge variant="secondary" className="ml-1 text-[9px] px-1 py-0">{Math.round(source.similarity * 100)}%</Badge>
     </Button>
   );
 
@@ -265,21 +248,36 @@ interface SourcesListProps {
 }
 
 export function SourcesList({ sources, onOpenDocument }: SourcesListProps) {
+  const [isExpanded, setIsExpanded] = useState(true);
+
   if (!sources || sources.length === 0) return null;
 
   return (
     <div className="mt-3 pt-3 border-t border-border/50">
-      <p className="text-xs text-muted-foreground mb-2">Sources consultées:</p>
-      <div className="flex flex-wrap gap-1">
-        {sources.map((source, index) => (
-          <DocumentViewer
-            key={index}
-            source={source}
-            index={index + 1}
-            onOpenDocument={onOpenDocument}
-          />
-        ))}
-      </div>
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="flex items-center gap-1 text-xs text-muted-foreground mb-2 hover:text-foreground transition-colors"
+      >
+        {isExpanded ? (
+          <ChevronDown className="h-3 w-3" />
+        ) : (
+          <ChevronRight className="h-3 w-3" />
+        )}
+        <span>Sources consultées ({sources.length})</span>
+      </button>
+
+      {isExpanded && (
+        <div className="flex flex-wrap gap-1">
+          {sources.map((source, index) => (
+            <DocumentViewer
+              key={index}
+              source={source}
+              index={index + 1}
+              onOpenDocument={onOpenDocument}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
