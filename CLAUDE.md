@@ -75,6 +75,16 @@ tail -f logs/backend_*.log
 tail -f logs/frontend_*.log
 ```
 
+### Document Ingestion
+```bash
+# Ingest all documents (PDFs + scraped content)
+make ingest
+
+# Or manually ingest specific directories
+uv run python -m packages.ingestion.ingest --documents data/raw/pdfs/
+uv run python -m packages.ingestion.ingest --documents data/processed/scraped/
+```
+
 ## API Endpoints
 
 ### Chat

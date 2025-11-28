@@ -52,7 +52,18 @@ run-frontend: ## Start frontend only
 	cd $(FRONTEND_DIR) && npm run dev
 
 ingest: ## Ingest documents into vector DB
-	.venv/bin/python -m packages.ingestion.ingest -d data/raw
+	@echo "════════════════════════════════════════════════════════════"
+	@echo "📚 Document Ingestion Pipeline"
+	@echo "════════════════════════════════════════════════════════════"
+	@echo ""
+	@echo "📄 [1/2] Ingesting PDF documents from data/raw/pdfs/..."
+	@uv run python -m packages.ingestion.ingest --documents data/raw/pdfs/ || echo "⚠️  No PDFs found or ingestion failed"
+	@echo ""
+	@echo "🌐 [2/2] Ingesting scraped web content from data/processed/scraped/..."
+	@uv run python -m packages.ingestion.ingest --documents data/processed/scraped/ || echo "⚠️  No scraped content found or ingestion failed"
+	@echo ""
+	@echo "✅ Document ingestion complete!"
+	@echo "════════════════════════════════════════════════════════════"
 
 pre-commit: ## Run pre-commit on all files
 	pre-commit run --all-files

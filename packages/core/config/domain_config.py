@@ -23,23 +23,29 @@ class QueryExpansionConfig:
 
     type_d: dict = field(
         default_factory=lambda: {
-            "synonyms": ["dispense", "D - Dispense"],
-            "criteria": ["50 m²", "24 heures"],
-            "context": ["déclaration", "occupation voie publique"],
+            "synonyms": [
+                "dispense",
+                "D - Dispense",
+                "minime importance",
+                "chantier dispensé",
+                "Occupation de type D",
+            ],
+            "criteria": ["50 m²", "24 heures", "emprise maximale", "durée maximale", "jour même"],
+            "context": ["déclaration simple", "occupation voie publique", "Osiris", "signalement"],
         }
     )
     type_e: dict = field(
         default_factory=lambda: {
-            "synonyms": ["exécution", "E - Exécution"],
+            "synonyms": ["exécution", "E - Exécution", "Occupation de type E"],
             "criteria": ["300 m²", "60 jours"],
             "context": ["frais administratifs"],
         }
     )
     type_a: dict = field(
         default_factory=lambda: {
-            "synonyms": ["autorisation", "A - Autorisation"],
-            "criteria": ["longue durée"],
-            "context": ["permis", "déviation"],
+            "synonyms": ["autorisation", "A - Autorisation", "Occupation de type A"],
+            "criteria": ["longue durée", "emprise importante"],
+            "context": ["permis", "déviation", "demande autorisation"],
         }
     )
 

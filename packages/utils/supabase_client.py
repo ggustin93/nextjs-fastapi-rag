@@ -175,8 +175,8 @@ class SupabaseRestClient:
     async def similarity_search(
         self,
         query_embedding: List[float],
-        limit: int = 10,
-        similarity_threshold: float = 0.4,
+        limit: int = 30,
+        similarity_threshold: float = 0.25,
     ) -> List[Dict[str, Any]]:
         """
         Vector similarity search via Supabase RPC function.
@@ -218,8 +218,8 @@ class SupabaseRestClient:
         self,
         query_text: str,
         query_embedding: List[float],
-        limit: int = 20,
-        similarity_threshold: float = 0.3,
+        limit: int = 30,
+        similarity_threshold: float = 0.25,
         exclude_toc: bool = True,
     ) -> List[Dict[str, Any]]:
         """
