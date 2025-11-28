@@ -11,14 +11,14 @@ describe('ChatInput', () => {
   it('renders input and button', () => {
     render(<ChatInput onSend={mockOnSend} />);
 
-    expect(screen.getByPlaceholderText('Type your message...')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Écrivez votre message...')).toBeInTheDocument();
     expect(screen.getByRole('button')).toBeInTheDocument();
   });
 
   it('calls onSend when clicking send button with valid input', () => {
     render(<ChatInput onSend={mockOnSend} />);
 
-    const input = screen.getByPlaceholderText('Type your message...');
+    const input = screen.getByPlaceholderText('Écrivez votre message...');
     fireEvent.change(input, { target: { value: 'Hello' } });
     fireEvent.click(screen.getByRole('button'));
 
@@ -28,7 +28,7 @@ describe('ChatInput', () => {
   it('clears input after sending', () => {
     render(<ChatInput onSend={mockOnSend} />);
 
-    const input = screen.getByPlaceholderText('Type your message...') as HTMLInputElement;
+    const input = screen.getByPlaceholderText('Écrivez votre message...') as HTMLInputElement;
     fireEvent.change(input, { target: { value: 'Hello' } });
     fireEvent.click(screen.getByRole('button'));
 
@@ -46,7 +46,7 @@ describe('ChatInput', () => {
   it('does not send whitespace-only messages', () => {
     render(<ChatInput onSend={mockOnSend} />);
 
-    const input = screen.getByPlaceholderText('Type your message...');
+    const input = screen.getByPlaceholderText('Écrivez votre message...');
     fireEvent.change(input, { target: { value: '   ' } });
     fireEvent.click(screen.getByRole('button'));
 
@@ -56,7 +56,7 @@ describe('ChatInput', () => {
   it('sends on Enter key press', () => {
     render(<ChatInput onSend={mockOnSend} />);
 
-    const input = screen.getByPlaceholderText('Type your message...');
+    const input = screen.getByPlaceholderText('Écrivez votre message...');
     fireEvent.change(input, { target: { value: 'Hello' } });
     fireEvent.keyDown(input, { key: 'Enter' });
 
@@ -66,7 +66,7 @@ describe('ChatInput', () => {
   it('disables input when disabled prop is true', () => {
     render(<ChatInput onSend={mockOnSend} disabled />);
 
-    expect(screen.getByPlaceholderText('Type your message...')).toBeDisabled();
+    expect(screen.getByPlaceholderText('Écrivez votre message...')).toBeDisabled();
     expect(screen.getByRole('button')).toBeDisabled();
   });
 });

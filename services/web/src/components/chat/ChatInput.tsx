@@ -28,7 +28,7 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
   };
 
   return (
-    <div className="flex gap-3 border-t border-border bg-background shadow-lg px-4 py-4">
+    <div className="flex gap-3 border-t border-border bg-background shadow-lg px-4 py-4" suppressHydrationWarning>
       <Input
         value={input}
         onChange={(e) => setInput(e.target.value)}
@@ -42,6 +42,7 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
         disabled={disabled || !input.trim()}
         size="icon-lg"
         className="group transition-all duration-150 ease-in-out hover:scale-105 active:scale-95 shrink-0"
+        suppressHydrationWarning
       >
         {disabled ? (
           <Loader2 className="h-5 w-5 animate-spin" />

@@ -2,6 +2,15 @@ export interface Source {
   title: string;
   path: string;
   similarity: number;
+  url?: string;              // Original URL for scraped web content
+  metadata?: {               // Full metadata for future use
+    url?: string;
+    source?: string;
+    category?: string;
+    language?: string;
+    crawled_at?: string;
+    [key: string]: any;
+  };
 }
 
 export interface ChatMessage {
