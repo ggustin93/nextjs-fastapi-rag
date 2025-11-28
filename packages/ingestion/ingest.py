@@ -72,7 +72,6 @@ class DocumentIngestionPipeline:
             chunk_size=config.chunk_size,
             chunk_overlap=config.chunk_overlap,
             max_chunk_size=config.max_chunk_size,
-            use_semantic_splitting=config.use_semantic_chunking,
         )
 
         self.chunker = create_chunker(self.chunker_config)

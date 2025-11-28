@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Button } from '@/components/ui/button';
-import { Loader2, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Maximize2, AlertCircle } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Loader2, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Maximize2, AlertCircle, Search, X } from 'lucide-react';
 import type { Source } from '@/types/chat';
 import { IframeViewer } from './IframeViewer';
 
@@ -31,11 +32,30 @@ export function DocumentContent({ source }: { source: Source; showControls?: boo
   const [scale, setScale] = useState<number>(1.0);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [pdfData, setPdfData] = useState<ArrayBuffer | null>(null);
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [mdContent, setMdContent] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState<string>('');
 
   const isPdf = source.path.toLowerCase().endsWith('.pdf');
-  const file = useMemo(() => (pdfData ? { data: pdfData } : null), [pdfData]);
+
+  // Escape regex special characters
+  const escapeRegex = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  // Custom text renderer for search highlighting
+  const customTextRenderer = useCallback(({ str }: { str: string }) => {
+    if (!searchTerm) return str;
+
+    const regex = new RegExp(`(${escapeRegex(searchTerm)})`, 'gi');
+    const parts = str.split(regex);
+
+    return parts
+      .map((part) =>
+        regex.test(part)
+          ? `<mark style="background-color: #fef08a; padding: 2px;">${part}</mark>`
+          : part
+      )
+      .join('');
+  }, [searchTerm]);
 
   // 1. Worker Init
   useEffect(() => {
@@ -52,9 +72,9 @@ export function DocumentContent({ source }: { source: Source; showControls?: boo
     const controller = new AbortController();
     setIsLoading(true);
     setError(null);
-    setPdfData(null);
     setMdContent(null);
-    setPageNumber(1);
+
+    let currentBlobUrl: string | null = null;
 
     const fetchData = async () => {
       try {
@@ -64,9 +84,10 @@ export function DocumentContent({ source }: { source: Source; showControls?: boo
         if (!res.ok) throw new Error(`Status ${res.status}`);
 
         if (isPdf) {
-          const data = await res.arrayBuffer();
-          if (data.byteLength === 0) throw new Error("File empty");
-          setPdfData(data);
+          const blob = await res.blob();
+          if (blob.size === 0) throw new Error("File empty");
+          currentBlobUrl = URL.createObjectURL(blob);
+          setPdfUrl(currentBlobUrl);
         } else {
           const text = await res.text();
           setMdContent(text);
@@ -82,8 +103,22 @@ export function DocumentContent({ source }: { source: Source; showControls?: boo
     };
 
     fetchData();
-    return () => controller.abort();
+
+    return () => {
+      controller.abort();
+      // Cleanup blob URL to prevent memory leaks
+      if (currentBlobUrl) {
+        URL.revokeObjectURL(currentBlobUrl);
+      }
+    };
   }, [source.path, isPdf]);
+
+  // 3. Auto-scroll to source page when document loads
+  useEffect(() => {
+    if (isPdf && source.page_number) {
+      setPageNumber(source.page_number);
+    }
+  }, [isPdf, source.page_number, pdfUrl]);
 
   // Renderers
   const isWebSource = Boolean(source.url);
@@ -98,7 +133,7 @@ export function DocumentContent({ source }: { source: Source; showControls?: boo
     );
   }
 
-  if (isLoading && !pdfData && !mdContent) {
+  if (isLoading && !pdfUrl && !mdContent) {
     return (
       <div className="h-full flex items-center justify-center text-muted-foreground gap-2">
         <Loader2 className="h-5 w-5 animate-spin" /> Loading content...
@@ -128,19 +163,49 @@ export function DocumentContent({ source }: { source: Source; showControls?: boo
     );
   }
 
-  // PDF rendering (unchanged)
-  if (isPdf && pdfData) {
+  // PDF rendering with search support
+  if (isPdf && pdfUrl) {
     return (
       <div className="h-full flex flex-col">
+        {/* Search toolbar */}
+        {!isLoading && !error && (
+          <div className="px-4 py-2 border-b bg-muted/5 flex items-center gap-2">
+            <Search className="h-4 w-4 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder="Rechercher dans le document..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="h-8 text-sm flex-1"
+            />
+            {searchTerm && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSearchTerm('')}
+                className="h-8 px-2"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+        )}
+
         <div className="flex-1 overflow-auto flex justify-center bg-muted/20 p-4">
           <Document
-            file={file}
+            file={pdfUrl}
             onLoadSuccess={({ numPages }) => { setNumPages(numPages); setIsLoading(false); }}
             onLoadError={(err) => setError(err.message)}
             loading={<div className="flex items-center gap-2"><Loader2 className="animate-spin" /> Rendering...</div>}
             className="shadow-lg"
           >
-            <Page pageNumber={pageNumber} scale={scale} renderTextLayer={false} renderAnnotationLayer={false} />
+            <Page
+              pageNumber={pageNumber}
+              scale={scale}
+              renderTextLayer={true}
+              customTextRenderer={customTextRenderer}
+              renderAnnotationLayer={false}
+            />
           </Document>
         </div>
 

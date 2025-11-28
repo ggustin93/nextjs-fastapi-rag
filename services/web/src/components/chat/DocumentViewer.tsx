@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -8,7 +8,8 @@ import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { FileText, ChevronLeft, ChevronRight, ChevronDown, Loader2, ZoomIn, ZoomOut, Maximize2, Globe2, FileType, FileCode } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { FileText, ChevronLeft, ChevronRight, ChevronDown, Loader2, ZoomIn, ZoomOut, Maximize2, Globe2, FileType, FileCode, Search, X } from 'lucide-react';
 import type { Source } from '@/types/chat';
 import { IframeViewer } from './IframeViewer';
 
@@ -61,11 +62,32 @@ export function DocumentViewer({ source, index, onOpenDocument }: DocumentViewer
   const [error, setError] = useState<string | null>(null);
 
   // Data State
-  const [pdfData, setPdfData] = useState<ArrayBuffer | null>(null);
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [mdContent, setMdContent] = useState<string | null>(null);
 
+  // Search State
+  const [searchTerm, setSearchTerm] = useState<string>('');
+
   const isPdf = source.path.toLowerCase().endsWith('.pdf');
-  const file = useMemo(() => (pdfData ? { data: pdfData } : null), [pdfData]);
+
+  // Escape regex special characters
+  const escapeRegex = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  // Custom text renderer for search highlighting
+  const customTextRenderer = useCallback(({ str }: { str: string }) => {
+    if (!searchTerm) return str;
+
+    const regex = new RegExp(`(${escapeRegex(searchTerm)})`, 'gi');
+    const parts = str.split(regex);
+
+    return parts
+      .map((part) =>
+        regex.test(part)
+          ? `<mark style="background-color: #fef08a; padding: 2px;">${part}</mark>`
+          : part
+      )
+      .join('');
+  }, [searchTerm]);
 
   // Fetch Data
   useEffect(() => {
@@ -74,8 +96,9 @@ export function DocumentViewer({ source, index, onOpenDocument }: DocumentViewer
     const controller = new AbortController();
     setIsLoading(true);
     setError(null);
-    setPdfData(null);
     setMdContent(null);
+
+    let currentBlobUrl: string | null = null;
 
     const fetchData = async () => {
       try {
@@ -85,9 +108,10 @@ export function DocumentViewer({ source, index, onOpenDocument }: DocumentViewer
         if (!res.ok) throw new Error(`Status ${res.status}`);
 
         if (isPdf) {
-          const data = await res.arrayBuffer();
-          if (data.byteLength === 0) throw new Error("Empty file");
-          setPdfData(data);
+          const blob = await res.blob();
+          if (blob.size === 0) throw new Error("Empty file");
+          currentBlobUrl = URL.createObjectURL(blob);
+          setPdfUrl(currentBlobUrl);
           // Note: isLoading stays true for PDF until React-PDF renders (onLoadSuccess)
         } else {
           const text = await res.text();
@@ -104,7 +128,14 @@ export function DocumentViewer({ source, index, onOpenDocument }: DocumentViewer
     };
 
     fetchData();
-    return () => controller.abort();
+
+    return () => {
+      controller.abort();
+      // Cleanup blob URL to prevent memory leaks
+      if (currentBlobUrl) {
+        URL.revokeObjectURL(currentBlobUrl);
+      }
+    };
   }, [isOpen, source.path, isPdf]);
 
   // Initialize PDF.js worker on the client when the viewer opens for a PDF.
@@ -142,7 +173,7 @@ export function DocumentViewer({ source, index, onOpenDocument }: DocumentViewer
 
     if (error) return <div className="p-8 text-destructive text-center">{error}</div>;
 
-    if (isLoading && !pdfData && !mdContent) {
+    if (isLoading && !pdfUrl && !mdContent) {
       return (
         <div className="flex items-center gap-2 text-muted-foreground p-10">
           <Loader2 className="h-5 w-5 animate-spin" /> Retrieving document...
@@ -170,17 +201,23 @@ export function DocumentViewer({ source, index, onOpenDocument }: DocumentViewer
       );
     }
 
-    // PDF rendering (unchanged)
-    if (isPdf && pdfData) {
+    // PDF rendering with search support
+    if (isPdf && pdfUrl) {
       return (
         <div className="flex justify-center bg-muted/30 p-4">
           <Document
-            file={file}
+            file={pdfUrl}
             onLoadSuccess={onDocumentLoadSuccess}
             onLoadError={(err) => setError(err.message)}
             loading={<div className="flex gap-2 p-4"><Loader2 className="animate-spin" /> Rendering PDF...</div>}
           >
-            <Page pageNumber={pageNumber} scale={scale} renderTextLayer={false} renderAnnotationLayer={false} />
+            <Page
+              pageNumber={pageNumber}
+              scale={scale}
+              renderTextLayer={true}
+              customTextRenderer={customTextRenderer}
+              renderAnnotationLayer={false}
+            />
           </Document>
         </div>
       );
@@ -205,6 +242,9 @@ export function DocumentViewer({ source, index, onOpenDocument }: DocumentViewer
       {index && <span className="font-mono text-muted-foreground mr-1 text-[10px]">[{index}]</span>}
       {getTypeIcon()}
       <span className="truncate max-w-[200px]">{source.title}</span>
+      {source.page_range && (
+        <Badge variant="outline" className="ml-1 text-[9px] px-1 py-0">{source.page_range}</Badge>
+      )}
       <Badge variant="secondary" className="ml-1 text-[9px] px-1 py-0">{Math.round(source.similarity * 100)}%</Badge>
     </Button>
   );
@@ -220,6 +260,30 @@ export function DocumentViewer({ source, index, onOpenDocument }: DocumentViewer
             <FileText className="h-5 w-5" /> {source.title}
           </DialogTitle>
         </DialogHeader>
+
+        {/* Search toolbar for PDFs */}
+        {isPdf && !isLoading && !error && (
+          <div className="px-4 py-2 border-b bg-muted/5 flex items-center gap-2">
+            <Search className="h-4 w-4 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder="Search in document..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="h-8 text-sm flex-1"
+            />
+            {searchTerm && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSearchTerm('')}
+                className="h-8 px-2"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+        )}
 
         <div className="flex-1 overflow-auto">{renderContent()}</div>
 
