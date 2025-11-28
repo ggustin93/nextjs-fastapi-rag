@@ -1,15 +1,17 @@
 # nextjs-fastapi-rag
 
-An open-source RAG (Retrieval-Augmented Generation) pipeline for building document-based Q&A applications. Combines vector similarity search with LLM responses to answer questions from your own documents.
+A production-ready, domain-agnostic RAG (Retrieval-Augmented Generation) system for building document-based Q&A applications. Clean architecture with optional domain customization and external API integration.
 
 ## Features
 
-- **Streaming Chat** - Real-time responses via Server-Sent Events
-- **Semantic Search** - pgvector cosine similarity (1536-dim embeddings)
+- **Streaming Chat** - Real-time responses via Server-Sent Events (SSE)
+- **Hybrid Search** - Vector similarity + French full-text search with re-ranking
 - **Multi-Format Ingestion** - PDF, Word, HTML, Markdown via Docling
 - **Web Scraping** - Crawl4AI for automated content extraction
-- **Source Citations** - Every response includes document sources
+- **Source Citations** - Every response includes ranked document sources
 - **Multi-Provider LLM** - OpenAI, Ollama, or any OpenAI-compatible API
+- **Domain-Agnostic** - Works generically or with optional domain configuration
+- **Extensible** - Add external API tools following clean patterns
 
 ## Tech Stack
 
@@ -73,6 +75,8 @@ flowchart TB
 nextjs-fastapi-rag/
 ├── packages/
 │   ├── core/               # RAG agent, CLI
+│   │   ├── config/         # Optional domain configuration
+│   │   └── tools/          # External API tool patterns
 │   ├── ingestion/          # Docling chunker, embedder
 │   ├── scraper/            # Crawl4AI web scraper
 │   ├── config/             # Centralized settings
@@ -82,13 +86,11 @@ nextjs-fastapi-rag/
 │   └── web/                # Next.js frontend
 ├── tests/
 │   ├── unit/               # Unit tests
-│   └── integration/        # API integration tests
-├── deploy/                 # Docker configuration
-├── sql/                    # Database schema
+│   ├── integration/        # API integration tests
+│   └── results/            # Evaluation metrics
+├── scripts/                # Utility scripts
 ├── data/                   # Documents for ingestion
-├── .github/workflows/      # CI/CD pipelines
 ├── pyproject.toml          # Python dependencies
-├── docker-compose.yml      # Local orchestration
 └── Makefile                # Development commands
 ```
 
@@ -185,7 +187,9 @@ EMBEDDING_MODEL=text-embedding-3-small
 
 ## Customization
 
-Customize the RAG agent's behavior via `RAG_SYSTEM_PROMPT` environment variable. See `.env.example` for examples (legal, medical, technical domains).
+### System Prompt
+
+Customize the RAG agent's behavior via `RAG_SYSTEM_PROMPT` environment variable:
 
 ```bash
 # Example: Legal domain
@@ -194,15 +198,55 @@ export RAG_SYSTEM_PROMPT="Tu es un expert juridique belge..."
 
 Default: Generic French knowledge assistant with numbered source citations.
 
+### Optional Domain Configuration
+
+The system works generically by default. Add domain-specific query expansion:
+
+```python
+from packages.core.config import DomainConfig, QueryExpansionConfig
+
+# Generic RAG (default)
+domain_config = DomainConfig()
+
+# With domain-specific query expansion
+domain_config = DomainConfig(
+    query_expansion=QueryExpansionConfig(
+        type_d={"synonyms": [...], "criteria": [...]}
+    )
+)
+```
+
+### External API Integration
+
+Add external API tools following the pattern in `packages/core/tools/external_api_example.py`:
+
+1. Create type-safe Pydantic models for API responses
+2. Define configuration with feature flags
+3. Implement async tool function with dependency injection
+4. Register conditionally based on configuration
+
+See weather API example for complete implementation pattern.
+
 ## Design Decisions
 
 | Decision | Rationale |
 |----------|-----------|
-| PydanticAI | Type safety, simpler than LangChain |
-| pgvector | Self-hosted, ACID compliance |
-| Docling | Better PDF parsing than alternatives |
-| SSE | Simpler than WebSocket for chat |
-| UV | Faster than pip |
+| **Domain-Agnostic Core** | Generic by default, optional domain customization |
+| **Dependency Injection** | Type-safe context via PydanticAI RunContext |
+| **Optional Configuration** | All domain features opt-in, not required |
+| **PydanticAI** | Type safety, simpler than LangChain |
+| **Hybrid Search** | Vector + FTS + re-ranking for better retrieval |
+| **pgvector** | Self-hosted, ACID compliance |
+| **Docling** | Better PDF parsing than alternatives |
+| **SSE** | Simpler than WebSocket for streaming chat |
+| **UV** | Faster dependency resolution than pip |
+
+## Architecture Principles
+
+- **SOLID**: Single responsibility, dependency inversion
+- **KISS**: Simple solutions over complex abstractions
+- **DRY**: Reusable configuration and tool patterns
+- **YAGNI**: No speculative features, build what's needed
 
 ## Disclaimer
 

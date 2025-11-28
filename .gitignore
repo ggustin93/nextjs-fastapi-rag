@@ -84,3 +84,9 @@ docling/
 # Test coverage reports
 coverage.xml
 htmlcov/
+
+# Test results and evaluation outputs
+tests/results/
+
+# Model caches
+.flashrank_cache/

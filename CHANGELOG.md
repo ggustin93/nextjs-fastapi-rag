@@ -77,6 +77,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Retrieval Quality**: Added rerank score threshold filtering (-2.0 minimum)
 
 ### Fixed
+- **Document Viewer Infinite Loading**: Fixed infinite "Chargement du document..." loading state
+  - Added 10-second timeout for PDF.js worker initialization with automatic retry
+  - Fixed PDF loading state synchronization - loading now properly managed by `onDocumentLoadSuccess` callback
+  - Added user-friendly error UI with manual retry button when worker initialization fails
+  - Added markdown content validation to prevent blank screens
+  - Applied fixes to both `DocumentContent.tsx` and `DocumentViewer.tsx` for consistent behavior
+  - Graceful handling of slow/offline networks with clear error messages
+- **React Hydration Error**: Fixed hydration mismatch caused by browser extensions
+  - Added `suppressHydrationWarning` to `<html>` and `<body>` tags in layout.tsx
+  - Prevents warnings from browser extensions (Dashlane, 1Password, etc.) injecting attributes
+- **DocumentContent ReferenceError**: Fixed `pdfData is not defined` error
+  - Changed line 225 to use `pdfDataRef.current` instead of undefined `pdfData` variable
 - **Ingestion Pipeline**: Fixed `IngestionResult` Pydantic model mismatch
   - Removed unused fields that didn't exist in model definition
 - **Cache Async Methods**: Fixed method naming in `packages/utils/cache.py`
