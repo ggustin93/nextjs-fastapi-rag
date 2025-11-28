@@ -13,6 +13,7 @@ This documentation is organized into interconnected sections that cover all aspe
 | [Architecture](./architecture.md) | System design and component overview | Components, data flow, tech stack, ADRs |
 | [API Reference](./api-reference.md) | Complete API documentation | Functions, database schema, environment |
 | [Project Structure](./project-structure.md) | Codebase organization | Directory tree, file descriptions, dependencies |
+| [Troubleshooting](./TROUBLESHOOT.md) | RAG retrieval issues | Similarity, reranking, query reformulation |
 
 ---
 

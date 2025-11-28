@@ -10,14 +10,15 @@ import logging
 import os
 import re
 import sys
-from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Optional
 
 from dotenv import load_dotenv
 from pydantic_ai import Agent, RunContext
 
 from packages.config import settings
 from packages.core.config import DomainConfig, QueryExpansionConfig
+from packages.core.types import RAGContext, WeatherConfig
+from packages.core.weather_tool import get_weather
 from packages.utils.supabase_client import SupabaseRestClient
 
 # FlashRank for local re-ranking (lazy-loaded to avoid startup cost)
@@ -50,29 +51,6 @@ last_search_sources = []
 # ==============================================================================
 # RAGContext: Dependency Injection for Agent Runtime
 # ==============================================================================
-
-
-@dataclass
-class RAGContext:
-    """RAG agent runtime context with dependency injection.
-
-    This is the CORE context for the RAG agent - contains all runtime dependencies
-    needed for agent operations. Replaces global singletons to enable:
-    - Multiple independent agent instances
-    - Testability with mock dependencies
-    - Clean dependency management
-
-    All fields are optional except db_client - external tools can add their own
-    config to this context if needed (e.g., external_api_config for weather API).
-    """
-
-    db_client: SupabaseRestClient
-    reranker: Optional[Any] = None
-    domain_config: Optional[DomainConfig] = None
-    last_search_sources: list = field(default_factory=list)
-    cited_source_indices: set[int] = field(default_factory=set)
-    # External API configs can be added optionally:
-    # external_api_config: Optional[ExternalAPIConfig] = None
 
 
 async def create_rag_context(domain_config: Optional[DomainConfig] = None) -> RAGContext:
@@ -113,21 +91,23 @@ async def create_rag_context(domain_config: Optional[DomainConfig] = None) -> RA
         db_client=db_client,
         reranker=reranker,
         domain_config=domain_config,  # Optional - None for generic RAG
+        weather_config=WeatherConfig(),  # Weather API config with defaults
         last_search_sources=[],
     )
 
 
 def reformulate_query(query: str) -> str:
     """
-    Remove question artifacts while preserving semantic intent for French queries.
+    Reformulate query for better semantic matching while preserving intent.
 
-    This approach removes interrogative patterns and filler words while keeping:
-    - Prepositions that indicate relationships (de, du, des, d')
-    - Quantifiers that indicate scope (tous, toutes, tout)
-    - Semantic markers that carry meaning
+    This approach:
+    1. Removes interrogative patterns and filler words
+    2. Preserves semantic markers (de, du, tous, etc.)
+    3. Adds definition-seeking terms for "what is" type questions
+    4. Keeps the query focused on the actual topic
 
     Examples:
-        "C'est quoi un chantier de type D ?" → "chantier de type D"
+        "C'est quoi un chantier de type D ?" → "définition chantier de type D critères"
         "Quels sont tous les critères du type D ?" → "tous les critères du type D"
         "Quelle est la durée maximale ?" → "durée maximale"
 
@@ -135,7 +115,7 @@ def reformulate_query(query: str) -> str:
         query: The user's question in French
 
     Returns:
-        Query with question artifacts removed, semantic markers preserved
+        Query optimized for semantic search
     """
     from packages.ingestion.french_stopwords import (
         FRENCH_STOPWORDS,
@@ -143,8 +123,27 @@ def reformulate_query(query: str) -> str:
         SEMANTIC_MARKERS,
     )
 
+    query_lower = query.lower().strip()
+
+    # Detect if user is asking for a definition/explanation
+    definition_patterns = [
+        "c'est quoi",
+        "qu'est-ce",
+        "qu'est ce",
+        "what is",
+        "what are",
+        "définition",
+        "definition",
+        "signifie",
+        "veut dire",
+        "explain",
+        "expliquer",
+    ]
+
+    is_definition_question = any(pattern in query_lower for pattern in definition_patterns)
+
     # Normalize: lowercase, strip whitespace and punctuation
-    q = query.lower().strip().rstrip("?!.")
+    q = query_lower.rstrip("?!.")
 
     # Remove question patterns
     for pattern in QUESTION_PATTERNS:
@@ -168,6 +167,12 @@ def reformulate_query(query: str) -> str:
 
     result = " ".join(filtered_tokens).strip()
 
+    # If it's a definition question, add terms that help find definitions/explanations
+    # This improves embedding similarity with chunks containing definitions
+    if is_definition_question and result:
+        result = f"définition {result} critères caractéristiques"
+        logger.debug(f"Definition question detected, enhanced query: '{result}'")
+
     # Only log if query was actually changed
     if result != query:
         logger.debug(f"Query reformulated: '{query}' → '{result}'")
@@ -178,6 +183,74 @@ def reformulate_query(query: str) -> str:
 # Initialize domain config with query expansion enabled (for backward compatibility)
 # Users can set this to DomainConfig() or None for generic RAG
 domain_config = DomainConfig(query_expansion=QueryExpansionConfig())
+
+
+def _build_rerank_query(original_query: str) -> str:
+    """
+    Build an optimized query for the reranker (cross-encoder).
+
+    The reranker works best with natural language queries that express
+    the user's intent clearly. This function enhances the query to help
+    find definition-style and criteria-based content.
+
+    Strategies applied:
+    1. Keep the original question (preserves intent and context)
+    2. Detect question types and add relevant search terms
+    3. Add definition-seeking terms for "what is" type questions
+
+    Args:
+        original_query: The user's original question
+
+    Returns:
+        Enhanced query optimized for cross-encoder reranking
+    """
+    query_lower = original_query.lower()
+
+    # Patterns indicating user wants a definition or explanation
+    definition_patterns = [
+        "c'est quoi",
+        "qu'est-ce",
+        "what is",
+        "what are",
+        "définition",
+        "definition",
+        "signifie",
+        "veut dire",
+        "explain",
+        "expliquer",
+        "décrire",
+        "describe",
+    ]
+
+    # Patterns indicating user wants criteria or conditions
+    criteria_patterns = [
+        "critères",
+        "criteria",
+        "conditions",
+        "requirements",
+        "exigences",
+        "règles",
+        "rules",
+        "comment",
+        "how to",
+        "procédure",
+        "procedure",
+    ]
+
+    # Start with the original query
+    query_parts = [original_query]
+
+    # If asking for a definition, add terms that help find explanatory content
+    if any(pattern in query_lower for pattern in definition_patterns):
+        # These terms help the reranker find content that defines/explains things
+        query_parts.append("définition description caractéristiques")
+
+    # If asking about criteria/conditions, add terms for finding structured content
+    if any(pattern in query_lower for pattern in criteria_patterns):
+        query_parts.append("conditions critères exigences")
+
+    # Combine parts - the reranker will score based on relevance to any part
+    return " ".join(query_parts)
 
 
 def expand_query_for_fts(query: str, config: Optional[DomainConfig] = None) -> str:
@@ -228,16 +301,17 @@ def expand_query_for_fts(query: str, config: Optional[DomainConfig] = None) -> s
         ]
 
         if any(pattern in query_lower for pattern in patterns):
-            # Add the most important expansion terms
-            expanded_terms.extend(expansions["synonyms"][:2])  # Main synonyms
-            expanded_terms.extend(expansions["criteria"][:2])  # Key criteria
+            # Add more expansion terms for better recall
+            expanded_terms.extend(expansions["synonyms"][:3])  # Increased from 2 to 3
+            expanded_terms.extend(expansions["criteria"][:3])  # Increased from 2 to 3
+            expanded_terms.extend(expansions["context"][:2])  # Add context terms
             logger.debug(f"Query expansion triggered for '{type_key}': adding {expanded_terms}")
             break  # Only expand for first matching type
 
     if expanded_terms:
         # Combine original query with expansion terms using OR logic
         # FTS will match documents containing ANY of these terms
-        expansion_str = " OR ".join(expanded_terms[:4])  # Limit to avoid overly broad search
+        expansion_str = " OR ".join(expanded_terms[:8])  # Increased from 4 to 8 for better recall
         expanded_query = f"{query} OR {expansion_str}"
         logger.info(f"Query expanded: '{query}' → '{expanded_query}'")
         return expanded_query
@@ -369,16 +443,19 @@ async def search_knowledge_base(
         rag_ctx: RAGContext = ctx.deps
 
         # Use db_client from context instead of global rest_client
-        # Reformulate query for better semantic matching
-        # Converts "Quelle est la superficie..." → "la valeur de la superficie..."
-        search_query = reformulate_query(query)
-        logger.debug(f"Query reformulated: '{query}' → '{search_query}'")
+        # Reformulate query for better semantic matching (can be disabled)
+        if settings.search.reformulate_query_enabled:
+            search_query = reformulate_query(query)
+            logger.debug(f"Query reformulated: '{query}' → '{search_query}'")
+        else:
+            search_query = query
+            logger.debug(f"Query reformulation disabled, using original: '{query}'")
 
         # Expand query for FTS (optional - uses domain_config from context if available)
         # "type D" → "type D OR dispense OR 50 m² OR 24 heures"
         fts_query = expand_query_for_fts(search_query, rag_ctx.domain_config)
 
-        # Generate embedding for reformulated query (NOT expanded - keeps semantic intent)
+        # Generate embedding for query
         from packages.ingestion.embedder import create_embedder
 
         embedder = create_embedder()
@@ -433,8 +510,8 @@ async def search_knowledge_base(
         # Use filtered results for response
         results = filtered_results
 
-        # Re-rank results using FlashRank for better precision
-        if len(results) > 5 and rag_ctx.reranker:
+        # Re-rank results using FlashRank for better precision (can be disabled)
+        if settings.search.rerank_enabled and len(results) > 3 and rag_ctx.reranker:
             try:
                 from flashrank import RerankRequest
 
@@ -455,13 +532,17 @@ async def search_knowledge_base(
                     for idx, r in enumerate(results)
                 ]
 
-                # Re-rank with original query
-                rerank_request = RerankRequest(query=search_query, passages=passages)
+                # Build rerank query - always use original query for better context
+                rerank_query = _build_rerank_query(query)
+                logger.debug(f"Rerank query: {rerank_query}")
+
+                # Re-rank with the enhanced query
+                rerank_request = RerankRequest(query=rerank_query, passages=passages)
                 reranked = reranker.rerank(rerank_request)
 
                 # Map re-ranked results back to original format
                 reranked_results = []
-                for item in reranked[:10]:  # Take top 10 re-ranked results
+                for item in reranked[:15]:  # Take top 15 re-ranked results (increased from 10)
                     original_idx = item.get("id", 0)
                     if 0 <= original_idx < len(results):
                         result = results[original_idx].copy()
@@ -582,7 +663,7 @@ async def search_knowledge_base(
 agent = Agent(
     settings.llm.create_model(),
     system_prompt=settings.llm.system_prompt,
-    tools=[search_knowledge_base],
+    tools=[search_knowledge_base, get_weather],
 )
 
 

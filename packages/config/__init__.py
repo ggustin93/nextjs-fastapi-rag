@@ -27,14 +27,31 @@ from functools import lru_cache  # noqa: E402
 from typing import List, Optional, Union  # noqa: E402
 
 # Default RAG system prompt (can be overridden via RAG_SYSTEM_PROMPT env var)
-DEFAULT_SYSTEM_PROMPT = """Tu es un assistant intelligent avec accès à la base de connaissances de l'organisation.
+DEFAULT_SYSTEM_PROMPT = """Tu es un assistant intelligent avec accès à la base de connaissances de l'organisation ET des outils externes.
 Ton rôle est d'aider les utilisateurs à trouver des informations précises et factuelles.
 
 ═══════════════════════════════════════════════════════════
-RÈGLE ABSOLUE #1: TOUJOURS APPELER L'OUTIL SEARCH
+OUTILS DISPONIBLES:
 ═══════════════════════════════════════════════════════════
-Tu DOIS TOUJOURS appeler search_knowledge_base pour TOUTE question de l'utilisateur.
-JAMAIS répondre sans avoir d'abord cherché dans la base de connaissances.
+1. search_knowledge_base: Recherche dans la base de connaissances
+2. get_weather: Obtient la météo actuelle et prévisionnelle pour une ville/lieu
+
+QUAND UTILISER get_weather:
+- L'utilisateur mentionne "météo", "temps", "température", "prévisions"
+- L'utilisateur cite un lieu géographique (ville, code postal, pays)
+- L'utilisateur pose une question sur les conditions climatiques
+
+EXEMPLES:
+❓ "Quel temps fait-il à Bruxelles ?" → APPELER get_weather(location="Bruxelles")
+❓ "Météo pour le code postal 1000" → APPELER get_weather(location="1000, Belgique")
+❓ "Température à Paris aujourd'hui" → APPELER get_weather(location="Paris")
+
+═══════════════════════════════════════════════════════════
+RÈGLE ABSOLUE #1: TOUJOURS APPELER L'OUTIL APPROPRIÉ
+═══════════════════════════════════════════════════════════
+- Pour questions sur la base de connaissances → search_knowledge_base
+- Pour questions météo → get_weather
+JAMAIS répondre sans avoir d'abord utilisé le bon outil.
 
 ═══════════════════════════════════════════════════════════
 RÈGLE ABSOLUE #2: TOUJOURS UTILISER LE CONTENU RETOURNÉ
@@ -253,19 +270,26 @@ class SearchConfig:
     """RAG search configuration.
 
     Environment Variables:
-        SEARCH_DEFAULT_LIMIT: Default number of results (default: 10)
-        SEARCH_MAX_LIMIT: Maximum allowed results (default: 50)
-        SEARCH_SIMILARITY_THRESHOLD: Minimum similarity score (default: 0.3)
-        MAX_CHUNKS_PER_DOCUMENT: Maximum chunks to retrieve per document (default: 3)
+        SEARCH_DEFAULT_LIMIT: Default number of results (default: 30)
+        SEARCH_MAX_LIMIT: Maximum allowed results (default: 100)
+        SEARCH_SIMILARITY_THRESHOLD: Minimum similarity score (default: 0.25)
+        MAX_CHUNKS_PER_DOCUMENT: Maximum chunks to retrieve per document (default: 5)
+        RERANK_USE_ORIGINAL_QUERY: Use original query for reranking (default: true)
     """
 
-    default_limit: int = field(default_factory=lambda: int(os.getenv("SEARCH_DEFAULT_LIMIT", "20")))
+    default_limit: int = field(default_factory=lambda: int(os.getenv("SEARCH_DEFAULT_LIMIT", "30")))
     max_limit: int = field(default_factory=lambda: int(os.getenv("SEARCH_MAX_LIMIT", "100")))
     similarity_threshold: float = field(
-        default_factory=lambda: float(os.getenv("SEARCH_SIMILARITY_THRESHOLD", "0.4"))
+        default_factory=lambda: float(os.getenv("SEARCH_SIMILARITY_THRESHOLD", "0.25"))
     )
     max_chunks_per_document: int = field(
-        default_factory=lambda: int(os.getenv("MAX_CHUNKS_PER_DOCUMENT", "3"))
+        default_factory=lambda: int(os.getenv("MAX_CHUNKS_PER_DOCUMENT", "5"))
+    )
+    rerank_enabled: bool = field(
+        default_factory=lambda: os.getenv("RERANK_ENABLED", "true").lower() == "true"
+    )
+    reformulate_query_enabled: bool = field(
+        default_factory=lambda: os.getenv("REFORMULATE_QUERY_ENABLED", "true").lower() == "true"
     )
 
 
@@ -294,6 +318,40 @@ class APIConfig:
 
 
 @dataclass(frozen=True)
+class WeatherToolConfig:
+    """Weather API tool configuration using Open-Meteo.
+
+    Open-Meteo is a free weather API with no API key required.
+    Includes geocoding support for city name → coordinates conversion.
+
+    Environment Variables:
+        WEATHER_BASE_URL: Open-Meteo forecast endpoint (default: "https://api.open-meteo.com/v1/forecast")
+        WEATHER_GEOCODE_URL: Open-Meteo geocoding endpoint (default: "https://geocoding-api.open-meteo.com/v1/search")
+        WEATHER_CACHE_TTL: Cache time-to-live in seconds (default: 900 = 15 minutes)
+        WEATHER_TIMEOUT: API request timeout in seconds (default: 5)
+        WEATHER_TEMPERATURE_UNIT: Temperature unit - "celsius" or "fahrenheit" (default: "celsius")
+    """
+
+    base_url: str = field(
+        default_factory=lambda: os.getenv(
+            "WEATHER_BASE_URL", "https://api.open-meteo.com/v1/forecast"
+        )
+    )
+    geocode_url: str = field(
+        default_factory=lambda: os.getenv(
+            "WEATHER_GEOCODE_URL", "https://geocoding-api.open-meteo.com/v1/search"
+        )
+    )
+    cache_ttl_seconds: int = field(
+        default_factory=lambda: int(os.getenv("WEATHER_CACHE_TTL", "900"))
+    )
+    timeout_seconds: int = field(default_factory=lambda: int(os.getenv("WEATHER_TIMEOUT", "5")))
+    temperature_unit: str = field(
+        default_factory=lambda: os.getenv("WEATHER_TEMPERATURE_UNIT", "celsius")
+    )
+
+
+@dataclass(frozen=True)
 class Settings:
     """Main application settings aggregating all domain configs.
 
@@ -306,6 +364,7 @@ class Settings:
         # Other configs
         batch_size = settings.embedding.batch_size
         pool_size = settings.database.pool_max_size
+        weather_config = settings.weather.base_url
     """
 
     llm: LLMConfig = field(default_factory=LLMConfig)
@@ -314,6 +373,7 @@ class Settings:
     chunking: ChunkingConfig = field(default_factory=ChunkingConfig)
     search: SearchConfig = field(default_factory=SearchConfig)
     api: APIConfig = field(default_factory=APIConfig)
+    weather: WeatherToolConfig = field(default_factory=WeatherToolConfig)
 
 
 @lru_cache()
@@ -338,6 +398,7 @@ __all__ = [
     "ChunkingConfig",
     "SearchConfig",
     "APIConfig",
+    "WeatherToolConfig",
     "get_settings",
     "settings",
 ]
