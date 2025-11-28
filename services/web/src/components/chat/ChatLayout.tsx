@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { ChatContainer } from './ChatContainer';
@@ -10,9 +10,17 @@ import type { Source } from '@/types/chat';
 export function ChatLayout() {
   const [isDocumentPanelOpen, setIsDocumentPanelOpen] = useState(false);
   const [currentDocument, setCurrentDocument] = useState<Source | null>(null);
+  const [isMounted, setIsMounted] = useState(false);
 
   // Detect desktop (768px = md breakpoint)
   const isDesktop = useMediaQuery('(min-width: 768px)');
+
+  // Prevent hydration mismatch by only rendering after mount
+  // This is a valid pattern for SSR hydration fixes per React docs
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setIsMounted(true);
+  }, []);
 
   const handleOpenDocument = (source: Source) => {
     // Clear any cached panel sizes to ensure 50/50 split
@@ -34,7 +42,19 @@ export function ChatLayout() {
     setTimeout(() => setCurrentDocument(null), 300);
   };
 
-  // Desktop: Unified layout that preserves chat state
+  // Prevent hydration mismatch: render mobile layout on server, switch to desktop after mount
+  if (!isMounted) {
+    // Server-side: always render mobile layout to avoid hydration mismatch
+    return (
+      <div className="h-screen w-screen flex flex-col">
+        <div className="flex-1 overflow-hidden">
+          <ChatContainer onOpenDocument={handleOpenDocument} />
+        </div>
+      </div>
+    );
+  }
+
+  // Client-side after mount: render appropriate layout based on screen size
   if (isDesktop) {
     return (
       <div className="h-screen w-screen flex">
