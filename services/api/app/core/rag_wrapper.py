@@ -1,6 +1,7 @@
 """Simplified wrapper that uses the existing RAG agent."""
 
 import logging
+import re
 from collections import defaultdict
 from typing import AsyncGenerator, Optional
 
@@ -16,6 +17,23 @@ from packages.core.agent import (
 from packages.core.config import DomainConfig, QueryExpansionConfig
 
 logger = logging.getLogger(__name__)
+
+
+def extract_cited_indices(response_text: str) -> set[int]:
+    """Extract source indices like [1], [2], [3] from response text.
+
+    Args:
+        response_text: The complete agent response text
+
+    Returns:
+        Set of 1-based indices that were cited in the response
+    """
+    matches = re.findall(r"\[(\d+)\]", response_text)
+    indices = {int(m) for m in matches}
+    if indices:
+        logger.info(f"Extracted cited source indices: {sorted(indices)}")
+    return indices
+
 
 # Session-based message history storage
 # In production, use Redis or database
@@ -112,13 +130,28 @@ async def stream_agent_response(
                     tool_name = getattr(tool_call, "tool_name", "unknown")
                     logger.info(f"  ↳ Tool called: {tool_name}")
 
+            # Extract cited source indices from complete response
+            final_text = await result.get_output()  # Get complete response text
+            cited_indices = extract_cited_indices(final_text)
+            rag_context.cited_source_indices = cited_indices
+
         # Get sources after streaming completes (pass context for dependency injection)
         sources = get_last_sources(rag_context)
         logger.info(f"📚 Sources retrieved: {len(sources) if sources else 0}")
 
         if sources:
-            logger.info(f"✅ Returning {len(sources)} sources to client")
-            yield {"type": "sources", "content": "", "sources": sources}
+            # Sort sources by similarity descending (defensive, should already be sorted)
+            sorted_sources = sorted(sources, key=lambda s: s["similarity"], reverse=True)
+
+            logger.info(
+                f"✅ Returning {len(sorted_sources)} sources with {len(cited_indices)} cited indices to client"
+            )
+            yield {
+                "type": "sources",
+                "content": "",
+                "sources": sorted_sources,
+                "cited_indices": list(cited_indices),  # Convert set to list for JSON
+            }
         else:
             logger.warning("⚠️ No sources retrieved - tool may not have been called")
 
