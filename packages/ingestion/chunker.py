@@ -225,6 +225,24 @@ class DoclingHybridChunker:
                 # Count actual tokens
                 token_count = len(self.tokenizer.encode(contextualized_text))
 
+                # Extract page information from chunk (for PDFs)
+                page_start = None
+                page_end = None
+
+                # Docling chunks have page information in their metadata
+                if hasattr(chunk, 'meta') and chunk.meta:
+                    # Try to get page from meta.page or meta.doc_items
+                    if hasattr(chunk.meta, 'page'):
+                        page_start = chunk.meta.page
+                        page_end = chunk.meta.page
+                    elif hasattr(chunk.meta, 'doc_items') and chunk.meta.doc_items:
+                        # Get page range from doc_items (list of document items in chunk)
+                        pages = [item.prov[0].page_no for item in chunk.meta.doc_items
+                                if hasattr(item, 'prov') and item.prov]
+                        if pages:
+                            page_start = min(pages)
+                            page_end = max(pages)
+
                 # Create chunk metadata
                 chunk_metadata = {
                     **base_metadata,
@@ -232,6 +250,12 @@ class DoclingHybridChunker:
                     "token_count": token_count,
                     "has_context": True,  # Flag indicating contextualized chunk
                 }
+
+                # Add page information if available
+                if page_start is not None:
+                    chunk_metadata["page_start"] = page_start
+                    if page_end is not None:
+                        chunk_metadata["page_end"] = page_end
 
                 # Estimate character positions
                 start_char = current_pos

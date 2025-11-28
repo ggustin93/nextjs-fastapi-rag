@@ -11,6 +11,9 @@ export interface Source {
     crawled_at?: string;
     [key: string]: any;
   };
+  // PDF page number support
+  page_number?: number;      // First page (for auto-scroll)
+  page_range?: string;       // Formatted range (e.g., "p. 5-7" or "p. 5")
 }
 
 export interface ChatMessage {

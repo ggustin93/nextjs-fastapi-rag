@@ -503,8 +503,21 @@ async def search_knowledge_base(
             doc_metadata = row.get("document_metadata", {})
             original_url = doc_metadata.get("url") if isinstance(doc_metadata, dict) else None
 
+            # Extract page information from chunk metadata (for PDFs)
+            chunk_metadata = row.get("metadata", {})
+            page_start = chunk_metadata.get("page_start") if isinstance(chunk_metadata, dict) else None
+            page_end = chunk_metadata.get("page_end") if isinstance(chunk_metadata, dict) else None
+
             # Build source object
             source_obj = {"title": doc_title, "path": doc_source, "similarity": similarity}
+
+            # Add page number info for PDFs
+            if page_start is not None:
+                source_obj["page_number"] = page_start
+                if page_end is not None and page_end != page_start:
+                    source_obj["page_range"] = f"p. {page_start}-{page_end}"
+                else:
+                    source_obj["page_range"] = f"p. {page_start}"
 
             # Add URL if available (for scraped web content)
             if original_url:

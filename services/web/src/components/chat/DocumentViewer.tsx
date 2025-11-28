@@ -55,7 +55,7 @@ export function DocumentViewer({ source, index, onOpenDocument }: DocumentViewer
 
   // Viewer State
   const [numPages, setNumPages] = useState<number>(0);
-  const [pageNumber, setPageNumber] = useState<number>(1);
+  const [pageNumber, setPageNumber] = useState<number>(source.page_number || 1);
   const [scale, setScale] = useState<number>(1.0);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -94,9 +94,10 @@ export function DocumentViewer({ source, index, onOpenDocument }: DocumentViewer
           setMdContent(text);
           setIsLoading(false);
         }
-      } catch (err: any) {
-        if (err.name !== 'AbortError') {
-          setError(err.message || 'Error loading document');
+      } catch (err: unknown) {
+        const error = err as Error;
+        if (error.name !== 'AbortError') {
+          setError(error.message || 'Error loading document');
           setIsLoading(false);
         }
       }
@@ -122,6 +123,13 @@ export function DocumentViewer({ source, index, onOpenDocument }: DocumentViewer
         });
     }
   }, [isPdf, isOpen]);
+
+  // Auto-scroll to source page when modal opens
+  useEffect(() => {
+    if (isOpen && source.page_number) {
+      setPageNumber(source.page_number);
+    }
+  }, [isOpen, source.page_number]);
 
   // Handlers
   const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
@@ -191,10 +199,11 @@ export function DocumentViewer({ source, index, onOpenDocument }: DocumentViewer
       );
     }
     if (isPdf) {
+      const pageInfo = source.page_range ? ` (${source.page_range})` : '';
       return (
         <Badge variant="secondary" className="ml-1 text-[10px] px-1 gap-0.5">
           <FileType className="h-2.5 w-2.5" />
-          PDF
+          PDF{pageInfo}
         </Badge>
       );
     }
