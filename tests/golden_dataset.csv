@@ -1,0 +1,21 @@
+query,expected_doc_path,expected_keywords,min_similarity,query_type
+"C'est quoi un chantier de type D ?","data/raw/pdfs/","['type D','50 m²','24 heures','dispense','Osiris']",0.65,semantic
+"Quels sont tous les critères du type D ?","data/raw/pdfs/","['emprise','durée','chaussée','piste cyclable']",0.65,comprehensive
+"Quelle est l'emprise maximale d'un chantier de type D ?","data/raw/pdfs/","['50 m²','emprise maximale']",0.70,exact_match
+"Combien de temps peut durer un chantier de type D ?","data/raw/pdfs/","['24 heures','durée maximale']",0.70,exact_match
+"Un chantier de type D nécessite-t-il une autorisation ?","data/raw/pdfs/","['dispense','autorisation','déclaration simple']",0.65,semantic
+"Comment signaler un chantier de type D ?","data/raw/pdfs/","['Osiris','signalement','jour même']",0.65,procedural
+"Quelle est la différence entre type A et type D ?","data/raw/pdfs/","['type A','type D','emprise','durée']",0.60,comparative
+"Peut-on faire un chantier de type D sur la chaussée ?","data/raw/pdfs/","['chaussée','en dehors','zone d intervention']",0.70,exact_match
+"Quel délai pour introduire une demande type D ?","data/raw/pdfs/","['20 jours','jour même','délai']",0.65,procedural
+"C'est quoi un chantier de minime importance ?","data/raw/pdfs/","['type D','minime importance','dispense']",0.60,semantic
+"Quelles sont les conditions d'un type D ?","data/raw/pdfs/","['50 m²','24 heures','hors chaussée']",0.65,comprehensive
+"Type D durée maximum ?","data/raw/pdfs/","['24 heures','durée maximale']",0.75,keyword
+"Emprise chantier type D ?","data/raw/pdfs/","['50 m²','emprise']",0.75,keyword
+"Autorisation chantier type D ?","data/raw/pdfs/","['dispense','déclaration simple']",0.70,keyword
+"Zone interdite chantier type D ?","data/raw/pdfs/","['chaussée','piste cyclable','transports en commun']",0.65,comprehensive
+"Procédure administrative type D ?","data/raw/pdfs/","['déclaration simple','Osiris','signalement']",0.65,procedural
+"Qu'est-ce qu'un chantier dispensé d'autorisation ?","data/raw/pdfs/","['type D','dispense','déclaration']",0.60,semantic
+"Chantier 24h maximum Bruxelles ?","data/raw/pdfs/","['type D','24 heures','durée']",0.65,semantic
+"Signalement Osiris chantier ?","data/raw/pdfs/","['Osiris','signalement','type D']",0.65,procedural
+"Je commence je finis chantier ?","data/raw/pdfs/","['type D','déclaration simple','dispense']",0.60,semantic
