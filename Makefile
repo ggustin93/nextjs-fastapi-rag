@@ -1,4 +1,4 @@
-.PHONY: help install install-dev lint format test test-backend test-frontend test-unit test-integration run run-backend run-frontend ingest docker-build docker-up docker-down docker-clean clean
+.PHONY: help install install-dev lint format test test-backend test-frontend test-unit test-integration run run-backend run-frontend ingest pre-commit pre-commit-install pre-commit-update docker-build docker-up docker-down docker-clean clean
 
 BACKEND_DIR := services/api
 FRONTEND_DIR := services/web
@@ -53,6 +53,15 @@ run-frontend: ## Start frontend only
 
 ingest: ## Ingest documents into vector DB
 	.venv/bin/python -m packages.ingestion.ingest -d data/raw
+
+pre-commit: ## Run pre-commit on all files
+	pre-commit run --all-files
+
+pre-commit-install: ## Install pre-commit hooks
+	pre-commit install
+
+pre-commit-update: ## Update pre-commit hooks to latest versions
+	pre-commit autoupdate
 
 docker-build: ## Build Docker images
 	docker-compose build

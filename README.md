@@ -103,15 +103,14 @@ nextjs-fastapi-rag/
 - PostgreSQL with pgvector extension
 - OpenAI API key
 
-### Installation
+### Quick Start
 
 ```bash
-# Clone repository
-git clone <repo-url>
-cd nextjs-fastapi-rag
-
 # Install dependencies
 make install
+
+# Setup pre-commit hooks (recommended)
+make pre-commit-install
 
 # Configure environment
 cp .env.example .env
@@ -136,7 +135,29 @@ make run
 | Health | http://localhost:8000/health |
 | API Docs | http://localhost:8000/docs |
 
-## Testing
+## Development
+
+### Code Quality
+
+Pre-commit hooks automatically check code quality before each commit:
+
+```bash
+# Install hooks (one-time setup)
+make pre-commit-install
+
+# Run checks manually
+make pre-commit
+
+# Update hook versions
+make pre-commit-update
+```
+
+**What's checked:**
+- **Python**: Ruff linting and formatting
+- **JavaScript/TypeScript**: ESLint and type checking
+- **General**: Trailing whitespace, EOF newlines, YAML syntax, secret detection
+
+### Testing
 
 ```bash
 make test              # All tests
@@ -163,13 +184,19 @@ GitHub Actions runs on push/PR:
 - Unit tests
 - Integration tests
 
-### Makefile
+### Make Commands
 
 ```bash
-make help              # Show all commands
-make lint              # Run linters
-make format            # Format code
-make clean             # Remove artifacts
+make help                  # Show all available commands
+make install               # Install dependencies
+make pre-commit-install    # Setup pre-commit hooks
+make pre-commit            # Run quality checks
+make run                   # Start dev servers
+make test                  # Run all tests
+make ingest                # Ingest documents
+make lint                  # Run linters
+make format                # Format code
+make clean                 # Remove artifacts
 ```
 
 ## Configuration
