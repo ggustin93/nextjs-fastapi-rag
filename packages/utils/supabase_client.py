@@ -116,6 +116,7 @@ class SupabaseRestClient:
         chunk_index: int,
         metadata: Dict[str, Any],
         token_count: int,
+        is_toc: bool = False,
     ):
         """
         Insert chunk via Supabase REST API.
@@ -127,6 +128,7 @@ class SupabaseRestClient:
             chunk_index: Chunk position in document
             metadata: Additional metadata
             token_count: Number of tokens in chunk
+            is_toc: True if chunk is Table of Contents content
         """
         try:
             # PostgreSQL vector format for Supabase
@@ -140,6 +142,7 @@ class SupabaseRestClient:
                     "chunk_index": chunk_index,
                     "metadata": metadata,
                     "token_count": token_count,
+                    "is_toc": is_toc,
                 }
             ).execute()
 
@@ -210,6 +213,56 @@ class SupabaseRestClient:
         except Exception as e:
             logger.error(f"Error in similarity search: {e}")
             raise
+
+    async def hybrid_search(
+        self,
+        query_text: str,
+        query_embedding: List[float],
+        limit: int = 20,
+        similarity_threshold: float = 0.3,
+        exclude_toc: bool = True,
+    ) -> List[Dict[str, Any]]:
+        """
+        Hybrid search combining vector similarity and French keyword matching.
+
+        Uses Reciprocal Rank Fusion (RRF) to combine semantic and keyword results.
+        Falls back to similarity_search if hybrid search fails.
+
+        Args:
+            query_text: Original search query for keyword matching
+            query_embedding: Query vector (1536 dimensions)
+            limit: Maximum number of results
+            similarity_threshold: Minimum similarity score (0-1)
+            exclude_toc: Whether to exclude TOC chunks marked during ingestion
+
+        Returns:
+            List of matching chunks with similarity and RRF scores
+        """
+        try:
+            # PostgreSQL vector format
+            embedding_str = "[" + ",".join(map(str, query_embedding)) + "]"
+
+            response = self.client.rpc(
+                "hybrid_search",
+                {
+                    "query_text": query_text,
+                    "query_embedding": embedding_str,
+                    "match_count": limit,
+                    "similarity_threshold": similarity_threshold,
+                    "exclude_toc": exclude_toc,
+                },
+            ).execute()
+
+            logger.info(
+                f"Hybrid search: {len(response.data)} results for query '{query_text[:50]}...'"
+            )
+
+            return response.data
+
+        except Exception as e:
+            logger.warning(f"Hybrid search failed, falling back to similarity search: {e}")
+            # Fallback to vector-only search
+            return await self.similarity_search(query_embedding, limit, similarity_threshold)
 
     async def get_document_count(self) -> int:
         """Get total number of documents."""
