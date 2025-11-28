@@ -15,6 +15,7 @@ Benefits over custom chunking:
 """
 
 import logging
+import re
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
@@ -62,6 +63,56 @@ class ChunkingConfig:
             raise ValueError("Minimum chunk size must be positive")
 
 
+# TOC detection patterns for French documents
+TOC_PATTERNS = [
+    r"^\s*table\s*(des\s*)?mati[èe]res?\s*$",  # "Table des matières"
+    r"^\s*sommaire\s*$",  # "Sommaire"
+    r"^\s*contents?\s*$",  # "Contents"
+    r"^[A-Z\s\.]+\s+\d+\s*$",  # "CHAPTER NAME    12"
+    r"^\d+\.\s+.{5,50}\s+\d+\s*$",  # "1.2 Section name   15"
+]
+
+
+def is_toc_chunk(content: str) -> bool:
+    """
+    Detect if chunk is likely a Table of Contents entry.
+    
+    Identifies TOC patterns based on:
+    - TOC header keywords (sommaire, table des matières)
+    - Lines with trailing page numbers
+    - Section number + title + page number patterns
+    
+    Args:
+        content: Chunk text content
+        
+    Returns:
+        True if chunk appears to be TOC content
+    """
+    if not content or len(content.strip()) < 10:
+        return False
+        
+    lines = content.strip().split("\n")
+    
+    # Check for lines ending with page numbers (e.g., "Section name   12")
+    page_ref_lines = 0
+    for line in lines:
+        stripped = line.strip()
+        # Pattern: text followed by whitespace and 1-3 digit number at end
+        if re.search(r"\s+\d{1,3}\s*$", stripped):
+            page_ref_lines += 1
+    
+    # If more than 50% of lines have page references, likely TOC
+    if len(lines) > 0 and page_ref_lines / len(lines) > 0.5:
+        return True
+    
+    # Check against known TOC patterns
+    for pattern in TOC_PATTERNS:
+        if re.search(pattern, content, re.IGNORECASE | re.MULTILINE):
+            return True
+    
+    return False
+
+
 @dataclass
 class DocumentChunk:
     """Represents a document chunk with optional embedding."""
@@ -73,12 +124,16 @@ class DocumentChunk:
     metadata: Dict[str, Any]
     token_count: Optional[int] = None
     embedding: Optional[List[float]] = None  # For embedder compatibility
+    is_toc: bool = False  # True if chunk is Table of Contents content
 
     def __post_init__(self):
-        """Calculate token count if not provided."""
+        """Calculate token count and detect TOC if not provided."""
         if self.token_count is None:
             # Rough estimation: ~4 characters per token
             self.token_count = len(self.content) // 4
+        # Auto-detect TOC if not explicitly set
+        if not self.is_toc:
+            self.is_toc = is_toc_chunk(self.content)
 
 
 class DoclingHybridChunker:
