@@ -5,279 +5,159 @@ import dynamic from 'next/dynamic';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Loader2, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
+import { Loader2, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Maximize2, AlertCircle } from 'lucide-react';
 import type { Source } from '@/types/chat';
+import { IframeViewer } from './IframeViewer';
 
-// Import react-pdf styles
 import 'react-pdf/dist/Page/TextLayer.css';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 
-// Dynamically import react-pdf components
-const Document = dynamic(
-  () => import('react-pdf').then((mod) => mod.Document),
-  { ssr: false }
-);
+const Document = dynamic(() => import('react-pdf').then((mod) => mod.Document), { ssr: false });
+const Page = dynamic(() => import('react-pdf').then((mod) => mod.Page), { ssr: false });
 
-const Page = dynamic(
-  () => import('react-pdf').then((mod) => mod.Page),
-  { ssr: false }
-);
+// Helper to clean API URLs
+const getDocumentUrl = (path: string) => {
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+  const cleanPath = path
+    .replace(/^documents\//, '')
+    .replace(/^data\//, '')
+    .normalize('NFC');
+  return `${baseUrl}/documents/${cleanPath.split('/').map(encodeURIComponent).join('/')}`;
+};
 
-// File type detection helpers
-const isPdfFile = (path: string) => path.toLowerCase().endsWith('.pdf');
-const isMarkdownFile = (path: string) => /\.(md|markdown)$/i.test(path);
-
-interface DocumentContentProps {
-  source: Source;
-  showControls?: boolean;
-}
-
-export function DocumentContent({ source, showControls = true }: DocumentContentProps) {
+export function DocumentContent({ source }: { source: Source; showControls?: boolean }) {
   const [numPages, setNumPages] = useState<number>(0);
   const [pageNumber, setPageNumber] = useState<number>(1);
+  const [scale, setScale] = useState<number>(1.0);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [isWorkerReady, setIsWorkerReady] = useState<boolean>(false);
-  const [scale, setScale] = useState<number>(1.0);
   const [pdfData, setPdfData] = useState<ArrayBuffer | null>(null);
-  const [markdownContent, setMarkdownContent] = useState<string | null>(null);
+  const [mdContent, setMdContent] = useState<string | null>(null);
 
-  const zoomIn = () => setScale((s) => Math.min(2.0, s + 0.25));
-  const zoomOut = () => setScale((s) => Math.max(0.5, s - 0.25));
-  const resetZoom = () => setScale(1.0);
+  const isPdf = source.path.toLowerCase().endsWith('.pdf');
+  const file = useMemo(() => (pdfData ? { data: pdfData } : null), [pdfData]);
 
-  const isPdf = isPdfFile(source.path);
-  const isMarkdown = isMarkdownFile(source.path);
-
-  // Memoize file prop to avoid unnecessary reloads
-  // Create a copy of the ArrayBuffer to prevent detachment when transferred to PDF.js worker
-  const file = useMemo(() => {
-    if (!pdfData) return null;
-    return { data: pdfData.slice(0) };
-  }, [pdfData]);
-
-  // Configure PDF.js worker on client side only (only for PDF files)
+  // 1. Worker Init
   useEffect(() => {
     if (isPdf) {
-      import('react-pdf').then((reactPdf) => {
-        reactPdf.pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${reactPdf.pdfjs.version}/build/pdf.worker.min.mjs`;
-        setIsWorkerReady(true);
+      import('react-pdf').then((pdf) => {
+        pdf.pdfjs.GlobalWorkerOptions.workerSrc =
+          `https://unpkg.com/pdfjs-dist@${pdf.pdfjs.version}/build/pdf.worker.min.mjs`;
       });
-    } else {
-      // For non-PDF files, worker is not needed
-      setIsWorkerReady(true);
     }
   }, [isPdf]);
 
-  // Fetch document data when component mounts or source changes
+  // 2. Data Fetch
   useEffect(() => {
-    // Reset state when document changes
+    const controller = new AbortController();
     setIsLoading(true);
     setError(null);
     setPdfData(null);
-    setMarkdownContent(null);
+    setMdContent(null);
     setPageNumber(1);
-    setScale(1.0);
 
-    const fetchDocument = async (url: string) => {
+    const fetchData = async () => {
       try {
-        const response = await fetch(url);
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
+        console.log("Fetching:", source.path);
+        const res = await fetch(getDocumentUrl(source.path), { signal: controller.signal });
+
+        if (!res.ok) throw new Error(`Status ${res.status}`);
 
         if (isPdf) {
-          // Fetch as binary for PDF
-          const data = await response.arrayBuffer();
+          const data = await res.arrayBuffer();
+          if (data.byteLength === 0) throw new Error("File empty");
           setPdfData(data);
         } else {
-          // Fetch as text for Markdown and other text files
-          const text = await response.text();
-          setMarkdownContent(text);
+          const text = await res.text();
+          setMdContent(text);
           setIsLoading(false);
         }
-      } catch (err) {
-        console.error('Document fetch error:', err);
-        setError(`Erreur de chargement: ${err instanceof Error ? err.message : 'Unknown error'}\\n\\nURL: ${url}`);
-        setIsLoading(false);
+      } catch (err: any) {
+        if (err.name !== 'AbortError') {
+          console.error(err);
+          setError(err.message);
+          setIsLoading(false);
+        }
       }
     };
 
-    const getDocumentUrl = (path: string) => {
-      const cleanPath = path.replace(/^documents\//, '');
-      const encodedPath = cleanPath.split('/').map(encodeURIComponent).join('/');
-      return `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'}/documents/${encodedPath}`;
-    };
-
-    const url = getDocumentUrl(source.path);
-    fetchDocument(url);
+    fetchData();
+    return () => controller.abort();
   }, [source.path, isPdf]);
 
-  const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
-    setNumPages(numPages);
-    setIsLoading(false);
-    setError(null);
-  };
+  // Renderers
+  const isWebSource = Boolean(source.url);
 
-  const onDocumentLoadError = (err: Error) => {
-    setIsLoading(false);
-    const getDocumentUrl = (path: string) => {
-      const cleanPath = path.replace(/^documents\//, '');
-      const encodedPath = cleanPath.split('/').map(encodeURIComponent).join('/');
-      return `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'}/documents/${encodedPath}`;
-    };
-    const url = getDocumentUrl(source.path);
-    console.error('PDF load error:', { error: err.message, url, path: source.path });
-    setError(`${err.message || 'Erreur de chargement'}\\n\\nURL: ${url}`);
-  };
-
-  const goToPrevPage = () => setPageNumber((p) => Math.max(1, p - 1));
-  const goToNextPage = () => setPageNumber((p) => Math.min(numPages, p + 1));
-
-  // Render content based on file type
   if (error) {
     return (
-      <div className="text-center p-8 text-destructive max-w-md">
-        <p className="font-medium">Erreur de chargement</p>
-        <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap break-all">{error}</p>
+      <div className="h-full flex flex-col items-center justify-center p-6 text-destructive text-center">
+        <AlertCircle className="h-8 w-8 mb-2" />
+        <p className="font-semibold">Error loading document</p>
+        <p className="text-xs mt-2 font-mono bg-muted p-2 rounded">{error}</p>
       </div>
     );
   }
 
-  if (isLoading && !markdownContent && !pdfData) {
+  if (isLoading && !pdfData && !mdContent) {
     return (
-      <div className="flex items-center gap-2 text-muted-foreground">
-        <Loader2 className="h-5 w-5 animate-spin" />
-        Chargement du document...
+      <div className="h-full flex items-center justify-center text-muted-foreground gap-2">
+        <Loader2 className="h-5 w-5 animate-spin" /> Loading content...
       </div>
     );
   }
 
-  // Markdown/Text viewer
-  if (isMarkdown || (!isPdf && markdownContent)) {
+  // Web source with iframe support
+  if (isWebSource && source.url && mdContent) {
     return (
-      <div className="w-full h-full overflow-auto p-6">
+      <IframeViewer
+        url={source.url}
+        markdownContent={mdContent}
+        title={source.title}
+      />
+    );
+  }
+
+  // Regular markdown (non-web sources)
+  if (!isPdf && !isWebSource && mdContent) {
+    return (
+      <div className="h-full overflow-auto p-6">
         <article className="prose prose-sm dark:prose-invert max-w-none">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>
-            {markdownContent || ''}
-          </ReactMarkdown>
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{mdContent}</ReactMarkdown>
         </article>
       </div>
     );
   }
 
-  // PDF viewer
-  if (isPdf) {
-    if (!isWorkerReady || !pdfData) {
-      return (
-        <div className="flex items-center gap-2 text-muted-foreground">
-          <Loader2 className="h-5 w-5 animate-spin" />
-          {!isWorkerReady ? 'Initialisation...' : 'Chargement du PDF...'}
-        </div>
-      );
-    }
-
+  // PDF rendering (unchanged)
+  if (isPdf && pdfData) {
     return (
-      <div className="flex flex-col h-full">
-        {/* Document Viewer */}
-        <div className="flex-1 overflow-auto border rounded-md bg-muted/30 flex items-center justify-center">
+      <div className="h-full flex flex-col">
+        <div className="flex-1 overflow-auto flex justify-center bg-muted/20 p-4">
           <Document
             file={file}
-            onLoadSuccess={onDocumentLoadSuccess}
-            onLoadError={onDocumentLoadError}
-            loading={
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Loader2 className="h-5 w-5 animate-spin" />
-                Rendu du PDF...
-              </div>
-            }
+            onLoadSuccess={({ numPages }) => { setNumPages(numPages); setIsLoading(false); }}
+            onLoadError={(err) => setError(err.message)}
+            loading={<div className="flex items-center gap-2"><Loader2 className="animate-spin" /> Rendering...</div>}
+            className="shadow-lg"
           >
-            <Page
-              pageNumber={pageNumber}
-              scale={scale}
-              loading={
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Chargement de la page...
-                </div>
-              }
-            />
+            <Page pageNumber={pageNumber} scale={scale} renderTextLayer={false} renderAnnotationLayer={false} />
           </Document>
         </div>
 
-        {/* Navigation and Zoom Controls - only for PDF */}
-        {showControls && !error && numPages > 0 && (
-          <div className="flex items-center justify-between pt-4 border-t">
-            {/* Zoom Controls */}
-            <div className="flex items-center gap-1">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={zoomOut}
-                disabled={scale <= 0.5 || isLoading}
-                title="Zoom arrière"
-              >
-                <ZoomOut className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={resetZoom}
-                disabled={isLoading}
-                title="Réinitialiser le zoom"
-              >
-                <Maximize2 className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={zoomIn}
-                disabled={scale >= 2.0 || isLoading}
-                title="Zoom avant"
-              >
-                <ZoomIn className="h-4 w-4" />
-              </Button>
-              <span className="text-xs text-muted-foreground ml-2">
-                {Math.round(scale * 100)}%
-              </span>
+        {!isLoading && (
+          <div className="p-3 border-t flex justify-between items-center bg-background">
+             <div className="flex gap-1">
+              <Button variant="ghost" size="sm" onClick={() => setScale(s => Math.max(0.5, s - 0.25))}><ZoomOut className="h-4 w-4" /></Button>
+              <Button variant="ghost" size="sm" onClick={() => setScale(1)}><Maximize2 className="h-4 w-4" /></Button>
+              <Button variant="ghost" size="sm" onClick={() => setScale(s => Math.min(2, s + 0.25))}><ZoomIn className="h-4 w-4" /></Button>
             </div>
-
-            {/* Page Navigation */}
             <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={goToPrevPage}
-                disabled={pageNumber <= 1 || isLoading}
-              >
-                <ChevronLeft className="h-4 w-4 mr-1" />
-                Précédent
-              </Button>
-              <span className="text-sm text-muted-foreground">
-                Page {pageNumber} / {numPages}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={goToNextPage}
-                disabled={pageNumber >= numPages || isLoading}
-              >
-                Suivant
-                <ChevronRight className="h-4 w-4 ml-1" />
-              </Button>
+              <Button variant="outline" size="sm" onClick={() => setPageNumber(p => Math.max(1, p - 1))} disabled={pageNumber <= 1}><ChevronLeft className="h-4 w-4" /></Button>
+              <span className="text-sm font-medium w-16 text-center">{pageNumber} / {numPages}</span>
+              <Button variant="outline" size="sm" onClick={() => setPageNumber(p => Math.min(numPages, p + 1))} disabled={pageNumber >= numPages}><ChevronRight className="h-4 w-4" /></Button>
             </div>
           </div>
         )}
-      </div>
-    );
-  }
-
-  // Fallback for unknown file types - show as plain text
-  if (markdownContent) {
-    return (
-      <div className="w-full h-full overflow-auto p-6">
-        <pre className="text-sm whitespace-pre-wrap font-mono">{markdownContent}</pre>
       </div>
     );
   }

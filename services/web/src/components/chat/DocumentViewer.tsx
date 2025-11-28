@@ -5,342 +5,243 @@ import dynamic from 'next/dynamic';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { FileText, ChevronLeft, ChevronRight, Loader2, ZoomIn, ZoomOut, Maximize2, Globe2, FileType, FileCode } from 'lucide-react';
+import type { Source } from '@/types/chat';
+import { IframeViewer } from './IframeViewer';
 
-// Import react-pdf styles for TextLayer and AnnotationLayer
+// Styles
 import 'react-pdf/dist/Page/TextLayer.css';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { FileText, ChevronLeft, ChevronRight, Loader2, ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
-import type { Source } from '@/types/chat';
+// Configure PDF.js worker on the client only (avoid server-side evaluation that
+// tries to access browser globals like `DOMMatrix` inside pdfjs-dist).
+// We set this up in a useEffect below so the module isn't imported at module
+// evaluation time on the server.
 
-// Dynamically import react-pdf components to avoid SSR issues
+// Lazy load PDF components with proper options
 const Document = dynamic(
   () => import('react-pdf').then((mod) => mod.Document),
-  { ssr: false }
+  { ssr: false, loading: () => <div className="flex gap-2 p-4"><Loader2 className="animate-spin" /> Loading PDF...</div> }
 );
-
 const Page = dynamic(
   () => import('react-pdf').then((mod) => mod.Page),
   { ssr: false }
 );
 
-// File type detection helpers
-const isPdfFile = (path: string) => path.toLowerCase().endsWith('.pdf');
-const isMarkdownFile = (path: string) => /\.(md|markdown)$/i.test(path);
+// Helper to clean API URLs
+const getDocumentUrl = (path: string) => {
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+  // Strip prefixes to ensure clean relative path
+  const cleanPath = path
+    .replace(/^documents\//, '')
+    .replace(/^data\//, '')
+    .normalize('NFC');
+
+  return `${baseUrl}/documents/${cleanPath.split('/').map(encodeURIComponent).join('/')}`;
+};
 
 interface DocumentViewerProps {
   source: Source;
-  index?: number;  // Optional numbered reference [1], [2], etc.
+  index?: number;
   onOpenDocument?: (source: Source) => void;
 }
 
 export function DocumentViewer({ source, index, onOpenDocument }: DocumentViewerProps) {
-  // Detect desktop (768px = md breakpoint)
   const isDesktop = useMediaQuery('(min-width: 768px)');
+  const [isOpen, setIsOpen] = useState(false);
+
+  // Viewer State
   const [numPages, setNumPages] = useState<number>(0);
   const [pageNumber, setPageNumber] = useState<number>(1);
+  const [scale, setScale] = useState<number>(1.0);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [isWorkerReady, setIsWorkerReady] = useState<boolean>(false);
-  const [scale, setScale] = useState<number>(1.0);
+
+  // Data State
   const [pdfData, setPdfData] = useState<ArrayBuffer | null>(null);
-  const [markdownContent, setMarkdownContent] = useState<string | null>(null);
+  const [mdContent, setMdContent] = useState<string | null>(null);
 
-  const zoomIn = () => setScale((s) => Math.min(2.0, s + 0.25));
-  const zoomOut = () => setScale((s) => Math.max(0.5, s - 0.25));
-  const resetZoom = () => setScale(1.0);
-
-  const similarityPercent = Math.round(source.similarity * 100);
-  const isPdf = isPdfFile(source.path);
-  const isMarkdown = isMarkdownFile(source.path);
-
-  // Memoize file prop to avoid unnecessary reloads
+  const isPdf = source.path.toLowerCase().endsWith('.pdf');
   const file = useMemo(() => (pdfData ? { data: pdfData } : null), [pdfData]);
 
-  // Configure PDF.js worker on client side only (only for PDF files)
+  // Fetch Data
   useEffect(() => {
-    if (isPdf) {
-      import('react-pdf').then((reactPdf) => {
-        reactPdf.pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${reactPdf.pdfjs.version}/build/pdf.worker.min.mjs`;
-        setIsWorkerReady(true);
-      });
-    } else {
-      // For non-PDF files, worker is not needed
-      setIsWorkerReady(true);
-    }
-  }, [isPdf]);
+    if (!isOpen) return;
 
-  // Fetch document data when dialog opens
-  const fetchDocument = async (url: string) => {
-    try {
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    const controller = new AbortController();
+    setIsLoading(true);
+    setError(null);
+    setPdfData(null);
+    setMdContent(null);
+
+    const fetchData = async () => {
+      try {
+        const url = getDocumentUrl(source.path);
+        const res = await fetch(url, { signal: controller.signal });
+
+        if (!res.ok) throw new Error(`Status ${res.status}`);
+
+        if (isPdf) {
+          const data = await res.arrayBuffer();
+          if (data.byteLength === 0) throw new Error("Empty file");
+          setPdfData(data);
+          // Note: isLoading stays true for PDF until React-PDF renders (onLoadSuccess)
+        } else {
+          const text = await res.text();
+          setMdContent(text);
+          setIsLoading(false);
+        }
+      } catch (err: any) {
+        if (err.name !== 'AbortError') {
+          setError(err.message || 'Error loading document');
+          setIsLoading(false);
+        }
       }
+    };
 
-      if (isPdf) {
-        // Fetch as binary for PDF
-        const data = await response.arrayBuffer();
-        setPdfData(data);
-      } else {
-        // Fetch as text for Markdown and other text files
-        const text = await response.text();
-        setMarkdownContent(text);
-        setIsLoading(false);
-      }
-    } catch (err) {
-      console.error('Document fetch error:', err);
-      setError(`Erreur de chargement: ${err instanceof Error ? err.message : 'Unknown error'}\n\nURL: ${url}`);
-      setIsLoading(false);
+    fetchData();
+    return () => controller.abort();
+  }, [isOpen, source.path, isPdf]);
+
+  // Initialize PDF.js worker on the client when the viewer opens for a PDF.
+  useEffect(() => {
+    if (isPdf && isOpen) {
+      import('react-pdf')
+        .then((pdf) => {
+          pdf.pdfjs.GlobalWorkerOptions.workerSrc =
+            `https://unpkg.com/pdfjs-dist@${pdf.pdfjs.version}/build/pdf.worker.mjs`;
+        })
+        .catch((err) => {
+          // Don't crash - just log worker init failures
+          // (keeps server-side rendering safe if import somehow happens)
+          // eslint-disable-next-line no-console
+          console.warn('Failed to initialize pdfjs worker', err);
+        });
     }
-  };
+  }, [isPdf, isOpen]);
 
-  // Build API URL for document - strip 'documents/' prefix if present
-  const getDocumentUrl = (path: string) => {
-    const cleanPath = path.replace(/^documents\//, '');
-    // Encode path components to handle spaces and special characters
-    const encodedPath = cleanPath.split('/').map(encodeURIComponent).join('/');
-    return `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'}/documents/${encodedPath}`;
-  };
-
+  // Handlers
   const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
     setNumPages(numPages);
-    setIsLoading(false);
-    setError(null);
+    setIsLoading(false); // PDF is ready visually
   };
 
-  const onDocumentLoadError = (err: Error) => {
-    setIsLoading(false);
-    const url = getDocumentUrl(source.path);
-    console.error('PDF load error:', { error: err.message, url, path: source.path });
-    setError(`${err.message || 'Erreur de chargement'}\n\nURL: ${url}`);
-  };
-
-  const goToPrevPage = () => setPageNumber((p) => Math.max(1, p - 1));
-  const goToNextPage = () => setPageNumber((p) => Math.min(numPages, p + 1));
-
-  // Reset state when dialog opens
-  const handleOpenChange = (open: boolean) => {
-    if (open) {
-      setPageNumber(1);
-      setIsLoading(true);
-      setError(null);
-      setScale(1.0);
-      setPdfData(null);
-      setMarkdownContent(null);
-      // Fetch document data
-      const url = getDocumentUrl(source.path);
-      fetchDocument(url);
-    }
-  };
-
-  // Render content based on file type
   const renderContent = () => {
-    if (error) {
+    const isWebSource = Boolean(source.url);
+
+    if (error) return <div className="p-8 text-destructive text-center">{error}</div>;
+
+    if (isLoading && !pdfData && !mdContent) {
       return (
-        <div className="text-center p-8 text-destructive max-w-md">
-          <p className="font-medium">Erreur de chargement</p>
-          <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap break-all">{error}</p>
+        <div className="flex items-center gap-2 text-muted-foreground p-10">
+          <Loader2 className="h-5 w-5 animate-spin" /> Retrieving document...
         </div>
       );
     }
 
-    if (isLoading && !markdownContent && !pdfData) {
+    // Web source with iframe support
+    if (isWebSource && source.url && mdContent) {
       return (
-        <div className="flex items-center gap-2 text-muted-foreground">
-          <Loader2 className="h-5 w-5 animate-spin" />
-          Chargement du document...
+        <IframeViewer
+          url={source.url}
+          markdownContent={mdContent}
+          title={source.title}
+        />
+      );
+    }
+
+    // Regular markdown (non-web sources)
+    if (!isPdf && !isWebSource && mdContent) {
+      return (
+        <article className="prose prose-sm dark:prose-invert max-w-none p-6">
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{mdContent}</ReactMarkdown>
+        </article>
+      );
+    }
+
+    // PDF rendering (unchanged)
+    if (isPdf && pdfData) {
+      return (
+        <div className="flex justify-center bg-muted/30 p-4">
+          <Document
+            file={file}
+            onLoadSuccess={onDocumentLoadSuccess}
+            onLoadError={(err) => setError(err.message)}
+            loading={<div className="flex gap-2 p-4"><Loader2 className="animate-spin" /> Rendering PDF...</div>}
+          >
+            <Page pageNumber={pageNumber} scale={scale} renderTextLayer={false} renderAnnotationLayer={false} />
+          </Document>
         </div>
       );
     }
-
-    // Markdown/Text viewer
-    if (isMarkdown || (!isPdf && markdownContent)) {
-      return (
-        <div className="w-full h-full overflow-auto p-6">
-          <article className="prose prose-sm dark:prose-invert max-w-none">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-              {markdownContent || ''}
-            </ReactMarkdown>
-          </article>
-        </div>
-      );
-    }
-
-    // PDF viewer
-    if (isPdf) {
-      if (!isWorkerReady || !pdfData) {
-        return (
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <Loader2 className="h-5 w-5 animate-spin" />
-            {!isWorkerReady ? 'Initialisation...' : 'Chargement du PDF...'}
-          </div>
-        );
-      }
-
-      return (
-        <Document
-          file={file}
-          onLoadSuccess={onDocumentLoadSuccess}
-          onLoadError={onDocumentLoadError}
-          loading={
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <Loader2 className="h-5 w-5 animate-spin" />
-              Rendu du PDF...
-            </div>
-          }
-        >
-          <Page
-            pageNumber={pageNumber}
-            scale={scale}
-            loading={
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Chargement de la page...
-              </div>
-            }
-          />
-        </Document>
-      );
-    }
-
-    // Fallback for unknown file types - show as plain text
-    if (markdownContent) {
-      return (
-        <div className="w-full h-full overflow-auto p-6">
-          <pre className="text-sm whitespace-pre-wrap font-mono">{markdownContent}</pre>
-        </div>
-      );
-    }
-
     return null;
   };
 
-  // Desktop: Button that triggers side panel
-  if (isDesktop && onOpenDocument) {
-    return (
-      <Button
-        variant="ghost"
-        size="sm"
-        className="h-auto py-1 px-2 text-xs hover:bg-muted"
-        onClick={() => onOpenDocument(source)}
-      >
-        {index !== undefined && (
-          <span className="font-mono text-muted-foreground mr-1">[{index}]</span>
-        )}
-        <FileText className="h-3 w-3 mr-1" />
-        {source.title}
-        <Badge variant="secondary" className="ml-2 text-[10px] px-1">
-          {similarityPercent}%
+  // Helper function to get document type badge
+  const getDocumentBadge = () => {
+    if (source.url) {
+      return (
+        <Badge variant="secondary" className="ml-1 text-[10px] px-1 gap-0.5">
+          <Globe2 className="h-2.5 w-2.5" />
+          Web
         </Badge>
-      </Button>
+      );
+    }
+    if (isPdf) {
+      return (
+        <Badge variant="secondary" className="ml-1 text-[10px] px-1 gap-0.5">
+          <FileType className="h-2.5 w-2.5" />
+          PDF
+        </Badge>
+      );
+    }
+    return (
+      <Badge variant="secondary" className="ml-1 text-[10px] px-1 gap-0.5">
+        <FileCode className="h-2.5 w-2.5" />
+        Doc
+      </Badge>
     );
-  }
+  };
 
-  // Mobile: Dialog modal (existing behavior)
+  // Button Trigger
+  const TriggerButton = (
+    <Button variant="ghost" size="sm" className="h-auto py-1 px-2 text-xs hover:bg-muted" onClick={() => isDesktop && onOpenDocument?.(source)}>
+      {index && <span className="font-mono text-muted-foreground mr-1">[{index}]</span>}
+      <FileText className="h-3 w-3 mr-1" />
+      {source.title}
+      {getDocumentBadge()}
+      <Badge variant="secondary" className="ml-1 text-[10px] px-1">{Math.round(source.similarity * 100)}%</Badge>
+    </Button>
+  );
+
+  if (isDesktop && onOpenDocument) return TriggerButton;
+
   return (
-    <Dialog onOpenChange={handleOpenChange}>
-      <DialogTrigger asChild>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-auto py-1 px-2 text-xs hover:bg-muted"
-        >
-          {index !== undefined && (
-            <span className="font-mono text-muted-foreground mr-1">[{index}]</span>
-          )}
-          <FileText className="h-3 w-3 mr-1" />
-          {source.title}
-          <Badge variant="secondary" className="ml-2 text-[10px] px-1">
-            {similarityPercent}%
-          </Badge>
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-6xl max-h-[95vh] flex flex-col">
-        <DialogHeader>
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+      <DialogTrigger asChild>{TriggerButton}</DialogTrigger>
+      <DialogContent className="max-w-4xl h-[85vh] flex flex-col p-0 gap-0">
+        <DialogHeader className="px-6 py-4 border-b">
           <DialogTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5" />
-            {source.title}
-            <Badge variant="outline" className="ml-auto">
-              Pertinence: {similarityPercent}%
-            </Badge>
+            <FileText className="h-5 w-5" /> {source.title}
           </DialogTitle>
         </DialogHeader>
 
-        {/* Document Viewer */}
-        <div className="flex-1 overflow-auto border rounded-md bg-muted/30 flex items-center justify-center min-h-[600px]">
-          {renderContent()}
-        </div>
+        <div className="flex-1 overflow-auto">{renderContent()}</div>
 
-        {/* Navigation and Zoom Controls - only for PDF */}
-        {isPdf && !error && numPages > 0 && (
-          <div className="flex items-center justify-between pt-4 border-t">
-            {/* Zoom Controls */}
-            <div className="flex items-center gap-1">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={zoomOut}
-                disabled={scale <= 0.5 || isLoading}
-                title="Zoom arrière"
-              >
-                <ZoomOut className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={resetZoom}
-                disabled={isLoading}
-                title="Réinitialiser le zoom"
-              >
-                <Maximize2 className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={zoomIn}
-                disabled={scale >= 2.0 || isLoading}
-                title="Zoom avant"
-              >
-                <ZoomIn className="h-4 w-4" />
-              </Button>
-              <span className="text-xs text-muted-foreground ml-2">
-                {Math.round(scale * 100)}%
-              </span>
+        {isPdf && !isLoading && !error && (
+          <div className="p-2 border-t bg-muted/10 flex justify-between items-center">
+            <div className="flex gap-1">
+              <Button variant="ghost" size="sm" onClick={() => setScale(s => Math.max(0.5, s - 0.25))}><ZoomOut className="h-4 w-4" /></Button>
+              <Button variant="ghost" size="sm" onClick={() => setScale(1)}><Maximize2 className="h-4 w-4" /></Button>
+              <Button variant="ghost" size="sm" onClick={() => setScale(s => Math.min(2, s + 0.25))}><ZoomIn className="h-4 w-4" /></Button>
             </div>
-
-            {/* Page Navigation */}
             <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={goToPrevPage}
-                disabled={pageNumber <= 1 || isLoading}
-              >
-                <ChevronLeft className="h-4 w-4 mr-1" />
-                Précédent
-              </Button>
-              <span className="text-sm text-muted-foreground">
-                Page {pageNumber} / {numPages}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={goToNextPage}
-                disabled={pageNumber >= numPages || isLoading}
-              >
-                Suivant
-                <ChevronRight className="h-4 w-4 ml-1" />
-              </Button>
+              <Button variant="outline" size="sm" onClick={() => setPageNumber(p => Math.max(1, p - 1))} disabled={pageNumber <= 1}><ChevronLeft className="h-4 w-4" /></Button>
+              <span className="text-sm">{pageNumber} / {numPages}</span>
+              <Button variant="outline" size="sm" onClick={() => setPageNumber(p => Math.min(numPages, p + 1))} disabled={pageNumber >= numPages}><ChevronRight className="h-4 w-4" /></Button>
             </div>
           </div>
         )}
