@@ -63,8 +63,9 @@ archives/
 data/raw/
 data/processed/
 
-# Keep data/examples/ tracked for tutorials
+# Keep data/examples/ tracked for tutorials (but ignore output/)
 !data/examples/
+data/examples/output/
 
 # Old documents directory (migrated to data/)
 documents/
@@ -90,3 +91,6 @@ tests/results/
 
 # Model caches
 .flashrank_cache/
+
+# Next.js public static assets (generated)
+services/web/public/*.svg

@@ -1,4 +1,5 @@
 repos:
+  # Python linting and formatting
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.4.0
     hooks:
@@ -6,6 +7,24 @@ repos:
         args: [--fix]
       - id: ruff-format
 
+  # JavaScript/TypeScript linting and type checking
+  - repo: local
+    hooks:
+      - id: eslint
+        name: eslint
+        entry: bash -c 'cd services/web && npm run lint -- --fix'
+        language: system
+        files: ^services/web/.*\.(js|jsx|ts|tsx)$
+        pass_filenames: false
+
+      - id: typescript
+        name: typescript type check
+        entry: bash -c 'cd services/web && npx tsc --noEmit'
+        language: system
+        files: ^services/web/.*\.(ts|tsx)$
+        pass_filenames: false
+
+  # General file quality checks
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.5.0
     hooks:
