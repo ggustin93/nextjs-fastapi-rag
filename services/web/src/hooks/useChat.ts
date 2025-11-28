@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef } from 'react';
 import { streamChat } from '@/lib/api-client';
-import type { ChatMessage, Source } from '@/types/chat';
+import type { ChatMessage, Source, ToolCallMetadata } from '@/types/chat';
 
 // Generate a unique session ID
 function generateSessionId(): string {
@@ -33,6 +33,7 @@ export function useChat() {
     let assistantContent = '';
     let assistantSources: Source[] = [];
     let citedIndices: number[] = [];
+    const assistantToolCalls: ToolCallMetadata[] = [];
 
     try {
       await streamChat(
@@ -53,6 +54,7 @@ export function useChat() {
                   content: assistantContent,
                   sources: assistantSources,
                   citedIndices,
+                  toolCalls: assistantToolCalls.length > 0 ? assistantToolCalls : undefined,
                 });
               } else {
                 // Create new assistant message
@@ -62,6 +64,7 @@ export function useChat() {
                   timestamp: new Date(),
                   sources: assistantSources,
                   citedIndices,
+                  toolCalls: assistantToolCalls.length > 0 ? assistantToolCalls : undefined,
                 });
               }
             });
@@ -78,6 +81,27 @@ export function useChat() {
                   ...lastMessage,
                   sources: assistantSources,
                   citedIndices,
+                  toolCalls: assistantToolCalls.length > 0 ? assistantToolCalls : undefined,
+                });
+              }
+              return prev;
+            });
+          } else if (event.type === 'tool_call') {
+            // Capture tool call metadata
+            const toolCall: ToolCallMetadata = {
+              tool_name: event.tool_name || '',
+              tool_args: event.tool_args || {},
+              execution_time_ms: event.execution_time_ms,
+            };
+            assistantToolCalls.push(toolCall);
+
+            // Update the assistant message with tool calls
+            setMessages((prev) => {
+              const lastMessage = prev[prev.length - 1];
+              if (lastMessage && lastMessage.role === 'assistant') {
+                return prev.slice(0, -1).concat({
+                  ...lastMessage,
+                  toolCalls: assistantToolCalls.length > 0 ? assistantToolCalls : undefined,
                 });
               }
               return prev;

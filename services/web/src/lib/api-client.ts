@@ -62,11 +62,21 @@ export async function streamChat(
         if (eventType && data) {
           try {
             const parsed = JSON.parse(data);
-            onEvent({
+            const event: StreamEvent = {
               type: eventType as StreamEvent['type'],
               content: parsed.content || '',
               sources: parsed.sources,
-            });
+              cited_indices: parsed.cited_indices,
+            };
+
+            // Add tool_call specific fields
+            if (eventType === 'tool_call') {
+              event.tool_name = parsed.tool_name;
+              event.tool_args = parsed.tool_args;
+              event.execution_time_ms = parsed.execution_time_ms;
+            }
+
+            onEvent(event);
           } catch (e) {
             console.error('Failed to parse SSE data:', e);
           }

@@ -39,6 +39,15 @@ async def event_stream(message: str, session_id: Optional[str] = None) -> AsyncG
             data = {"content": "", "sources": event.get("sources", [])}
             yield f"event: {event_type}\n"
             yield f"data: {json.dumps(data)}\n\n"
+        elif event_type == "tool_call":
+            # Send tool call metadata
+            data = {
+                "tool_name": event.get("tool_name", ""),
+                "tool_args": event.get("tool_args", {}),
+                "execution_time_ms": event.get("execution_time_ms", 0),
+            }
+            yield f"event: {event_type}\n"
+            yield f"data: {json.dumps(data)}\n\n"
         else:
             # Normal events (token, done, error)
             content = event.get("content", "")

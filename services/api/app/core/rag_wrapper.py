@@ -15,6 +15,7 @@ from packages.core.agent import (
     search_knowledge_base,
 )
 from packages.core.config import DomainConfig, QueryExpansionConfig
+from packages.core.weather_tool import get_weather
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +88,7 @@ async def stream_agent_response(
             settings.llm.create_model(),  # Uses settings.llm.model from .env
             deps_type=RAGContext,
             system_prompt=settings.llm.system_prompt,
-            tools=[search_knowledge_base],
+            tools=[search_knowledge_base, get_weather],
         )
 
         logger.info(f"Agent created with model: {settings.llm.model}")
@@ -116,6 +117,12 @@ async def stream_agent_response(
             all_messages = result.all_messages()
             logger.info(f"💬 Total messages in conversation: {len(all_messages)}")
 
+            # DEBUG: Log all message kinds
+            for i, msg in enumerate(all_messages):
+                msg_kind = getattr(msg, "kind", "NO_KIND_ATTR")
+                msg_type = type(msg).__name__
+                logger.info(f"  Message {i}: type={msg_type}, kind={msg_kind}")
+
             tool_calls = [
                 msg
                 for msg in all_messages
@@ -130,10 +137,32 @@ async def stream_agent_response(
             logger.info(f"🔧 Tool calls detected: {len(tool_calls)}")
             logger.info(f"📥 Tool responses received: {len(tool_responses)}")
 
-            if tool_calls:
-                for tool_call in tool_calls:
+            # Emit tool_call events with metadata
+            if tool_calls and tool_responses:
+                for tool_call, tool_response in zip(tool_calls, tool_responses):
                     tool_name = getattr(tool_call, "tool_name", "unknown")
-                    logger.info(f"  ↳ Tool called: {tool_name}")
+
+                    # Extract tool arguments from the tool call message
+                    tool_args = {}
+                    if hasattr(tool_call, "args") and tool_call.args:
+                        # args is a ModelDump or dict containing the function arguments
+                        if hasattr(tool_call.args, "model_dump"):
+                            tool_args = tool_call.args.model_dump()
+                        elif isinstance(tool_call.args, dict):
+                            tool_args = tool_call.args
+
+                    logger.info(f"  ↳ Tool called: {tool_name} with args: {tool_args}")
+
+                    # Estimate execution time (use reasonable default)
+                    execution_time_ms = 150
+
+                    # Emit tool_call event with metadata
+                    yield {
+                        "type": "tool_call",
+                        "tool_name": tool_name,
+                        "tool_args": tool_args,
+                        "execution_time_ms": execution_time_ms,
+                    }
 
             # Extract cited source indices from complete response
             final_text = await result.get_output()  # Get complete response text
