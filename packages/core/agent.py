@@ -17,7 +17,7 @@ from dotenv import load_dotenv
 from pydantic_ai import Agent, RunContext
 
 from packages.config import settings
-from packages.core.config import DomainConfig
+from packages.core.config import DomainConfig, QueryExpansionConfig
 from packages.utils.supabase_client import SupabaseRestClient
 
 # FlashRank for local re-ranking (lazy-loaded to avoid startup cost)
@@ -33,6 +33,7 @@ def get_reranker():
         _reranker = Ranker(model_name="ms-marco-MiniLM-L-12-v2", cache_dir="./.flashrank_cache")
         logger.info("FlashRank reranker initialized")
     return _reranker
+
 
 # Load environment variables
 load_dotenv(".env")
@@ -50,19 +51,21 @@ last_search_sources = []
 # RAGContext: Dependency Injection for Agent Runtime
 # ==============================================================================
 
+
 @dataclass
 class RAGContext:
     """RAG agent runtime context with dependency injection.
-    
+
     This is the CORE context for the RAG agent - contains all runtime dependencies
     needed for agent operations. Replaces global singletons to enable:
     - Multiple independent agent instances
     - Testability with mock dependencies
     - Clean dependency management
-    
+
     All fields are optional except db_client - external tools can add their own
     config to this context if needed (e.g., external_api_config for weather API).
     """
+
     db_client: SupabaseRestClient
     reranker: Optional[Any] = None
     domain_config: Optional[DomainConfig] = None
@@ -71,26 +74,24 @@ class RAGContext:
     # external_api_config: Optional[ExternalAPIConfig] = None
 
 
-async def create_rag_context(
-    domain_config: Optional[DomainConfig] = None
-) -> RAGContext:
+async def create_rag_context(domain_config: Optional[DomainConfig] = None) -> RAGContext:
     """Create RAG context with core dependencies.
-    
+
     Factory function to initialize all agent runtime dependencies. All parameters
     are optional - creates a generic RAG agent by default. For domain-specific
     behavior, pass a DomainConfig with query expansion settings.
-    
+
     Args:
         domain_config: Optional domain-specific configuration for query expansion.
                       If None, uses generic RAG behavior.
-    
+
     Returns:
         Initialized RAGContext with all dependencies ready for agent use.
-    
+
     Example:
         # Generic RAG (no domain customization)
         context = await create_rag_context()
-        
+
         # Domain-specific RAG with query expansion
         config = DomainConfig(query_expansion=QueryExpansionConfig())
         context = await create_rag_context(domain_config=config)
@@ -99,12 +100,13 @@ async def create_rag_context(
     db_client = SupabaseRestClient()
     await db_client.initialize()
     logger.info("RAGContext: Supabase client initialized")
-    
+
     # Initialize re-ranker (lazy-loaded through get_reranker())
     from flashrank import Ranker
+
     reranker = Ranker(model_name="ms-marco-MiniLM-L-12-v2", cache_dir="./.flashrank_cache")
     logger.info("RAGContext: FlashRank reranker initialized")
-    
+
     # Create context with all dependencies
     return RAGContext(
         db_client=db_client,
@@ -112,6 +114,7 @@ async def create_rag_context(
         domain_config=domain_config,  # Optional - None for generic RAG
         last_search_sources=[],
     )
+
 
 def reformulate_query(query: str) -> str:
     """
@@ -159,9 +162,7 @@ def reformulate_query(query: str) -> str:
         # 1. It's a semantic marker (de, du, tous, etc.)
         # 2. It's not a stopword
         # 3. It's not empty
-        if clean_token in SEMANTIC_MARKERS or (
-            clean_token not in FRENCH_STOPWORDS and clean_token
-        ):
+        if clean_token in SEMANTIC_MARKERS or (clean_token not in FRENCH_STOPWORDS and clean_token):
             filtered_tokens.append(token)
 
     result = " ".join(filtered_tokens).strip()
@@ -175,8 +176,6 @@ def reformulate_query(query: str) -> str:
 
 # Initialize domain config with query expansion enabled (for backward compatibility)
 # Users can set this to DomainConfig() or None for generic RAG
-from packages.core.config import QueryExpansionConfig
-
 domain_config = DomainConfig(query_expansion=QueryExpansionConfig())
 
 
@@ -298,11 +297,11 @@ def is_toc_chunk(content: str) -> bool:
 
 def get_last_sources(context: Optional[RAGContext] = None):
     """Get and clear the last search sources.
-    
+
     Args:
         context: Optional RAGContext. If provided, sources are retrieved from context.
                  If None, falls back to global variable for backward compatibility.
-    
+
     Returns:
         List of source objects from the last search.
     """
@@ -336,7 +335,9 @@ async def close_db():
         logger.info("Supabase REST client closed")
 
 
-async def search_knowledge_base(ctx: RunContext[RAGContext], query: str, limit: int | None = None) -> str:
+async def search_knowledge_base(
+    ctx: RunContext[RAGContext], query: str, limit: int | None = None
+) -> str:
     """
     Search the knowledge base using semantic similarity.
 
@@ -365,7 +366,7 @@ async def search_knowledge_base(ctx: RunContext[RAGContext], query: str, limit: 
     try:
         # Get RAG context from deps (dependency injection)
         rag_ctx: RAGContext = ctx.deps
-        
+
         # Use db_client from context instead of global rest_client
         # Reformulate query for better semantic matching
         # Converts "Quelle est la superficie..." → "la valeur de la superficie..."
@@ -419,7 +420,9 @@ async def search_knowledge_base(ctx: RunContext[RAGContext], query: str, limit: 
 
         if len(filtered_results) < len(results):
             toc_count = original_count - len(filtered_results)
-            logger.info(f"TOC filter: removed {toc_count} TOC chunks, {len(filtered_results)} remaining")
+            logger.info(
+                f"TOC filter: removed {toc_count} TOC chunks, {len(filtered_results)} remaining"
+            )
 
         # Fallback: if all chunks were TOC, use original results with warning
         if not filtered_results and results:
@@ -436,7 +439,7 @@ async def search_knowledge_base(ctx: RunContext[RAGContext], query: str, limit: 
 
                 # Use reranker from context (already initialized)
                 reranker = rag_ctx.reranker
-                
+
                 # Format results for FlashRank
                 passages = [
                     {
@@ -501,11 +504,7 @@ async def search_knowledge_base(ctx: RunContext[RAGContext], query: str, limit: 
             original_url = doc_metadata.get("url") if isinstance(doc_metadata, dict) else None
 
             # Build source object
-            source_obj = {
-                "title": doc_title,
-                "path": doc_source,
-                "similarity": similarity
-            }
+            source_obj = {"title": doc_title, "path": doc_source, "similarity": similarity}
 
             # Add URL if available (for scraped web content)
             if original_url:
@@ -527,7 +526,7 @@ async def search_knowledge_base(ctx: RunContext[RAGContext], query: str, limit: 
 
             # Format with document title and similarity score
             response_parts.append(
-                f"{source_ref} Source: \"{doc_title}\" (Pertinence: {similarity_pct}%{confidence_marker})\n{content}\n"
+                f'{source_ref} Source: "{doc_title}" (Pertinence: {similarity_pct}%{confidence_marker})\n{content}\n'
             )
 
         # Store sources in context for retrieval
@@ -547,7 +546,8 @@ async def search_knowledge_base(ctx: RunContext[RAGContext], query: str, limit: 
             extra={
                 "response_length": len(formatted_response),
                 "num_sources": len(response_parts),
-                "response_preview": formatted_response[:2000] + "...",  # Increased to 2000 chars for debugging
+                "response_preview": formatted_response[:2000]
+                + "...",  # Increased to 2000 chars for debugging
             },
         )
         # Log full response for debugging

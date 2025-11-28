@@ -64,9 +64,9 @@ class TestChatStreamEndpoint:
         content_type = response.headers.get("content-type", "")
         # Accept either SSE or error response (if RAG not configured)
         if response.status_code == 200:
-            assert "text/event-stream" in content_type, (
-                f"Expected SSE content type, got: {content_type}"
-            )
+            assert (
+                "text/event-stream" in content_type
+            ), f"Expected SSE content type, got: {content_type}"
 
     @pytest.mark.asyncio
     async def test_chat_stream_empty_message_handling(self, client):
@@ -76,9 +76,11 @@ class TestChatStreamEndpoint:
         response = await client.post("/api/v1/chat/stream", json={"message": ""})
 
         # Should either accept or return 400/422, not 500
-        assert response.status_code in [200, 400, 422], (
-            f"Unexpected error handling empty message: {response.status_code}"
-        )
+        assert response.status_code in [
+            200,
+            400,
+            422,
+        ], f"Unexpected error handling empty message: {response.status_code}"
 
 
 class TestChatHealthEndpoint:
@@ -119,6 +121,6 @@ class TestCORSConfiguration:
         # Some FastAPI setups return 405 for OPTIONS without explicit handler
         if response.status_code in [200, 204]:
             allowed_origins = response.headers.get("access-control-allow-origin", "")
-            assert "localhost:3000" in allowed_origins or allowed_origins == "*", (
-                f"CORS doesn't allow localhost:3000: {allowed_origins}"
-            )
+            assert (
+                "localhost:3000" in allowed_origins or allowed_origins == "*"
+            ), f"CORS doesn't allow localhost:3000: {allowed_origins}"

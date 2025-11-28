@@ -93,15 +93,23 @@ async def stream_agent_response(
             all_messages = result.all_messages()
             logger.info(f"💬 Total messages in conversation: {len(all_messages)}")
 
-            tool_calls = [msg for msg in all_messages if hasattr(msg, 'kind') and msg.kind == 'request-tool-call']
-            tool_responses = [msg for msg in all_messages if hasattr(msg, 'kind') and msg.kind == 'response-tool-return']
+            tool_calls = [
+                msg
+                for msg in all_messages
+                if hasattr(msg, "kind") and msg.kind == "request-tool-call"
+            ]
+            tool_responses = [
+                msg
+                for msg in all_messages
+                if hasattr(msg, "kind") and msg.kind == "response-tool-return"
+            ]
 
             logger.info(f"🔧 Tool calls detected: {len(tool_calls)}")
             logger.info(f"📥 Tool responses received: {len(tool_responses)}")
 
             if tool_calls:
                 for tool_call in tool_calls:
-                    tool_name = getattr(tool_call, 'tool_name', 'unknown')
+                    tool_name = getattr(tool_call, "tool_name", "unknown")
                     logger.info(f"  ↳ Tool called: {tool_name}")
 
         # Get sources after streaming completes (pass context for dependency injection)

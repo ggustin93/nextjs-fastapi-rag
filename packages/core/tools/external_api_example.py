@@ -18,8 +18,10 @@ To use this pattern for your own API:
 4. Replace fetch_weather with your API's fetch function
 5. Register the tool in services/api/app/core/rag_wrapper.py (see pattern below)
 """
-import httpx
+
 from typing import Optional
+
+import httpx
 from pydantic import BaseModel, Field
 from pydantic_ai import RunContext
 
@@ -32,6 +34,7 @@ class WeatherData(BaseModel):
     Replace this with your API's response structure.
     Use Pydantic for type safety and validation.
     """
+
     temperature: float = Field(description="Temperature in Celsius")
     condition: str = Field(description="Weather condition")
     humidity: int = Field(description="Humidity percentage")
@@ -48,6 +51,7 @@ class ExternalAPIConfig(BaseModel):
     - Feature flags (enabled/disabled)
     - Rate limits, retry policies
     """
+
     enabled: bool = True
     api_key: Optional[str] = None
     api_url: str = "https://api.openweathermap.org/data/2.5/weather"
@@ -56,11 +60,7 @@ class ExternalAPIConfig(BaseModel):
 
 
 # Step 3: Create the tool function (the actual API integration)
-async def fetch_weather(
-    ctx: RunContext,
-    city: str,
-    country_code: str = "BE"
-) -> WeatherData:
+async def fetch_weather(ctx: RunContext, city: str, country_code: str = "BE") -> WeatherData:
     """
     EXAMPLE: Fetch weather data for a city.
 
@@ -91,7 +91,9 @@ async def fetch_weather(
         raise ValueError("External API integration is disabled in configuration")
 
     if not config.api_key:
-        raise ValueError("External API key not configured - set WEATHER_API_KEY environment variable")
+        raise ValueError(
+            "External API key not configured - set WEATHER_API_KEY environment variable"
+        )
 
     # Make API call with proper error handling
     try:
@@ -101,8 +103,8 @@ async def fetch_weather(
                 params={
                     "q": f"{city},{country_code}",
                     "appid": config.api_key,
-                    "units": "metric"  # Celsius
-                }
+                    "units": "metric",  # Celsius
+                },
             )
             response.raise_for_status()
             data = response.json()
@@ -113,7 +115,7 @@ async def fetch_weather(
             temperature=data["main"]["temp"],
             condition=data["weather"][0]["description"],
             humidity=data["main"]["humidity"],
-            location=f"{city}, {country_code}"
+            location=f"{city}, {country_code}",
         )
 
     except httpx.HTTPStatusError as e:

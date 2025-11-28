@@ -76,23 +76,23 @@ TOC_PATTERNS = [
 def is_toc_chunk(content: str) -> bool:
     """
     Detect if chunk is likely a Table of Contents entry.
-    
+
     Identifies TOC patterns based on:
     - TOC header keywords (sommaire, table des matières)
     - Lines with trailing page numbers
     - Section number + title + page number patterns
-    
+
     Args:
         content: Chunk text content
-        
+
     Returns:
         True if chunk appears to be TOC content
     """
     if not content or len(content.strip()) < 10:
         return False
-        
+
     lines = content.strip().split("\n")
-    
+
     # Check for lines ending with page numbers (e.g., "Section name   12")
     page_ref_lines = 0
     for line in lines:
@@ -100,16 +100,16 @@ def is_toc_chunk(content: str) -> bool:
         # Pattern: text followed by whitespace and 1-3 digit number at end
         if re.search(r"\s+\d{1,3}\s*$", stripped):
             page_ref_lines += 1
-    
+
     # If more than 50% of lines have page references, likely TOC
     if len(lines) > 0 and page_ref_lines / len(lines) > 0.5:
         return True
-    
+
     # Check against known TOC patterns
     for pattern in TOC_PATTERNS:
         if re.search(pattern, content, re.IGNORECASE | re.MULTILINE):
             return True
-    
+
     return False
 
 

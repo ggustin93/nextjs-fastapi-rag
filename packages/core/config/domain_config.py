@@ -4,6 +4,7 @@ This module provides OPTIONAL domain-specific configuration for the RAG agent.
 The RAG system works perfectly without any domain configuration - these are
 purely optional enhancements for specific use cases.
 """
+
 from dataclasses import dataclass, field
 from typing import Optional
 

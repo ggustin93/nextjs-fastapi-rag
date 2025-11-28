@@ -117,7 +117,7 @@ export function DocumentViewer({ source, index, onOpenDocument }: DocumentViewer
         .catch((err) => {
           // Don't crash - just log worker init failures
           // (keeps server-side rendering safe if import somehow happens)
-          // eslint-disable-next-line no-console
+
           console.warn('Failed to initialize pdfjs worker', err);
         });
     }

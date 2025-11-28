@@ -155,4 +155,3 @@ CHUNK 22
 ============================================================
 11. API Endpoints Reference
 /v1/documents/upload, Method = POST. /v1/documents/upload, Purpose = Upload document for processing. /v1/documents/upload, Auth Required = Yes. /v1/documents/{id}, Method = GET. /v1/documents/{id}, Purpose = Retrieve document results. /v1/documents/{id}, Auth Required = Yes. /v1/chat/conversation, Method = POST. /v1/chat/conversation, Purpose = Start new conversation. /v1/chat/conversation, Auth Required = Yes. /v1/chat/message, Method = POST. /v1/chat/message, Purpose = Send message in conversation. /v1/chat/message, Auth Required = Yes. /v1/analytics/query, Method = POST. /v1/analytics/query, Purpose = Run analytics query. /v1/analytics/query, Auth Required = Yes. /v1/health, Method = GET. /v1/health, Purpose = System health check. /v1/health, Auth Required = No
-

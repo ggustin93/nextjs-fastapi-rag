@@ -32,8 +32,7 @@ load_dotenv()
 
 # Configure logging with INFO level to show debug logs
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 
 # Initialize FastAPI app

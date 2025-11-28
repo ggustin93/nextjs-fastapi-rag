@@ -3,12 +3,14 @@
 RAG System Evaluation Script
 Measures: Recall@5, MRR, Precision, Latency
 """
+
 import asyncio
 import csv
 import json
 import time
 from pathlib import Path
-from typing import List, Dict, Tuple
+from typing import Dict, List, Tuple
+
 import httpx
 
 # Configuration
@@ -16,6 +18,7 @@ API_URL = "http://localhost:8000/api/v1/chat/stream"
 TEST_DATA = Path("tests/golden_dataset.csv")
 RESULTS_DIR = Path("tests/results")
 RESULTS_DIR.mkdir(exist_ok=True)
+
 
 class RAGEvaluator:
     def __init__(self):
@@ -25,7 +28,7 @@ class RAGEvaluator:
             "mrr": [],
             "precision_at_5": [],
             "latencies": [],
-            "similarity_scores": []
+            "similarity_scores": [],
         }
 
     async def query_rag(self, query: str) -> Tuple[List[Dict], float, str]:
@@ -34,9 +37,7 @@ class RAGEvaluator:
 
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
-                API_URL,
-                json={"message": query},
-                headers={"Content-Type": "application/json"}
+                API_URL, json={"message": query}, headers={"Content-Type": "application/json"}
             )
 
         latency = (time.time() - start_time) * 1000  # ms
@@ -50,23 +51,25 @@ class RAGEvaluator:
         response_text = ""
         current_event = None
 
-        for line in response.text.split('\n'):
+        for line in response.text.split("\n"):
             line = line.strip()
-            if line.startswith('event:'):
+            if line.startswith("event:"):
                 current_event = line[6:].strip()
-            elif line.startswith('data:'):
+            elif line.startswith("data:"):
                 try:
                     data = json.loads(line[5:].strip())
-                    if current_event == 'sources':
-                        sources = data.get('sources', [])
-                    elif current_event in ('chunk', 'token'):
-                        response_text += data.get('content', '')
+                    if current_event == "sources":
+                        sources = data.get("sources", [])
+                    elif current_event in ("chunk", "token"):
+                        response_text += data.get("content", "")
                 except json.JSONDecodeError:
                     continue
 
         return sources, latency, response_text
 
-    def calculate_recall(self, sources: List[Dict], expected_keywords: List[str], response_text: str = "") -> float:
+    def calculate_recall(
+        self, sources: List[Dict], expected_keywords: List[str], response_text: str = ""
+    ) -> float:
         """Calculate recall: fraction of expected keywords found in response text.
 
         Since sources don't include chunk content, we check if keywords appear in
@@ -93,12 +96,16 @@ class RAGEvaluator:
 
         # Expected patterns for relevant documents (type D related)
         relevant_patterns = expected_doc_patterns or [
-            "type d", "type_d", "occupation", "osiris", "userguide"
+            "type d",
+            "type_d",
+            "occupation",
+            "osiris",
+            "userguide",
         ]
 
         for rank, source in enumerate(sources[:5], start=1):
-            title = source.get('title', '').lower()
-            path = source.get('path', '').lower()
+            title = source.get("title", "").lower()
+            path = source.get("path", "").lower()
             combined = f"{title} {path}"
 
             # Check if source is from a relevant document
@@ -107,7 +114,9 @@ class RAGEvaluator:
 
         return 0.0  # No relevant result in top 5
 
-    def calculate_precision(self, sources: List[Dict], expected_doc_patterns: List[str] = None) -> float:
+    def calculate_precision(
+        self, sources: List[Dict], expected_doc_patterns: List[str] = None
+    ) -> float:
         """Calculate precision@5: fraction of top 5 sources from relevant documents.
 
         Uses document title/path to determine relevance since source content
@@ -118,13 +127,17 @@ class RAGEvaluator:
 
         # Expected patterns for relevant documents
         relevant_patterns = expected_doc_patterns or [
-            "type d", "type_d", "occupation", "osiris", "userguide"
+            "type d",
+            "type_d",
+            "occupation",
+            "osiris",
+            "userguide",
         ]
 
         relevant_count = 0
         for source in sources[:5]:
-            title = source.get('title', '').lower()
-            path = source.get('path', '').lower()
+            title = source.get("title", "").lower()
+            path = source.get("path", "").lower()
             combined = f"{title} {path}"
 
             if any(pattern in combined for pattern in relevant_patterns):
@@ -134,14 +147,14 @@ class RAGEvaluator:
 
     def extract_similarity_scores(self, sources: List[Dict]) -> List[float]:
         """Extract similarity scores from sources."""
-        return [s.get('similarity', 0.0) for s in sources[:5]]
+        return [s.get("similarity", 0.0) for s in sources[:5]]
 
     async def evaluate_query(self, row: Dict) -> Dict:
         """Evaluate a single query."""
-        query = row['query']
-        expected_keywords = json.loads(row['expected_keywords'].replace("'", '"'))
-        min_similarity = float(row['min_similarity'])
-        query_type = row['query_type']
+        query = row["query"]
+        expected_keywords = json.loads(row["expected_keywords"].replace("'", '"'))
+        min_similarity = float(row["min_similarity"])
+        query_type = row["query_type"]
 
         print(f"\n🔍 Testing: {query}")
         print(f"   Type: {query_type} | Min Similarity: {min_similarity}")
@@ -170,13 +183,15 @@ class RAGEvaluator:
             "similarity_scores": similarity_scores,
             "meets_threshold": meets_threshold,
             "num_sources": len(sources),
-            "response_length": len(response)
+            "response_length": len(response),
         }
 
         # Print result
         status = "✅" if recall >= 0.6 and meets_threshold else "❌"
         print(f"   {status} Recall: {recall:.2f} | MRR: {mrr:.2f} | Precision: {precision:.2f}")
-        print(f"   Latency: {latency:.0f}ms | Sources: {len(sources)} | Similarities: {similarity_scores[:3]}")
+        print(
+            f"   Latency: {latency:.0f}ms | Sources: {len(sources)} | Similarities: {similarity_scores[:3]}"
+        )
 
         return result
 
@@ -187,7 +202,7 @@ class RAGEvaluator:
         print("=" * 80)
 
         # Load test data
-        with open(TEST_DATA, 'r', encoding='utf-8') as f:
+        with open(TEST_DATA, "r", encoding="utf-8") as f:
             reader = csv.DictReader(f)
             test_cases = list(reader)
 
@@ -227,21 +242,23 @@ class RAGEvaluator:
         similarities = [s for s in self.metrics["similarity_scores"] if s > 0]
         avg_similarity = sum(similarities) / len(similarities) if similarities else 0
 
-        print(f"\n🎯 PRIMARY METRICS:")
+        print("\n🎯 PRIMARY METRICS:")
         print(f"   Recall@5:     {avg_recall:.2%} (Target: >60%)")
         print(f"   MRR:          {avg_mrr:.3f} (Target: >0.45)")
         print(f"   Precision@5:  {avg_precision:.2%} (Target: >70%)")
 
-        print(f"\n⚡ PERFORMANCE:")
+        print("\n⚡ PERFORMANCE:")
         print(f"   Avg Latency:  {avg_latency:.0f}ms")
         print(f"   P95 Latency:  {p95_latency:.0f}ms (Target: <600ms)")
 
-        print(f"\n📊 RETRIEVAL QUALITY:")
+        print("\n📊 RETRIEVAL QUALITY:")
         print(f"   Avg Similarity: {avg_similarity:.3f} (Target: >0.65)")
-        print(f"   Queries with results: {sum(1 for r in self.results if r['num_sources'] > 0)}/{len(self.results)}")
+        print(
+            f"   Queries with results: {sum(1 for r in self.results if r['num_sources'] > 0)}/{len(self.results)}"
+        )
 
         # By query type
-        print(f"\n📋 BY QUERY TYPE:")
+        print("\n📋 BY QUERY TYPE:")
         query_types = set(r["query_type"] for r in self.results)
         for qtype in sorted(query_types):
             type_results = [r for r in self.results if r["query_type"] == qtype]
@@ -264,22 +281,30 @@ class RAGEvaluator:
             "metrics": {
                 "recall_at_5": sum(self.metrics["recall_at_5"]) / len(self.metrics["recall_at_5"]),
                 "mrr": sum(self.metrics["mrr"]) / len(self.metrics["mrr"]),
-                "precision_at_5": sum(self.metrics["precision_at_5"]) / len(self.metrics["precision_at_5"]),
+                "precision_at_5": sum(self.metrics["precision_at_5"])
+                / len(self.metrics["precision_at_5"]),
                 "avg_latency_ms": sum(self.metrics["latencies"]) / len(self.metrics["latencies"]),
-                "p95_latency_ms": sorted(self.metrics["latencies"])[int(0.95 * len(self.metrics["latencies"]))],
-                "avg_similarity": sum([s for s in self.metrics["similarity_scores"] if s > 0]) / len([s for s in self.metrics["similarity_scores"] if s > 0]) if [s for s in self.metrics["similarity_scores"] if s > 0] else 0
+                "p95_latency_ms": sorted(self.metrics["latencies"])[
+                    int(0.95 * len(self.metrics["latencies"]))
+                ],
+                "avg_similarity": sum([s for s in self.metrics["similarity_scores"] if s > 0])
+                / len([s for s in self.metrics["similarity_scores"] if s > 0])
+                if [s for s in self.metrics["similarity_scores"] if s > 0]
+                else 0,
             },
-            "detailed_results": self.results
+            "detailed_results": self.results,
         }
 
-        with open(output_file, 'w', encoding='utf-8') as f:
+        with open(output_file, "w", encoding="utf-8") as f:
             json.dump(summary, f, indent=2, ensure_ascii=False)
 
         print(f"\n💾 Results saved to: {output_file}")
 
+
 async def main():
     evaluator = RAGEvaluator()
     await evaluator.run_evaluation()
+
 
 if __name__ == "__main__":
     asyncio.run(main())
