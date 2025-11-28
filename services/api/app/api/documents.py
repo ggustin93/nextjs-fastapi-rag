@@ -48,6 +48,7 @@ def find_document(filename: str) -> Path | None:
 async def get_document(file_path: str):
     """
     Serve a document file.
+    Handles paths like "raw/file.pdf" or "data/raw/file.pdf" gracefully.
 
     Args:
         file_path: Path to the document relative to documents directory
@@ -56,12 +57,19 @@ async def get_document(file_path: str):
         The document file
     """
     # Security: Sanitize input path first
-    file_path = Path(file_path).as_posix()
-    if ".." in file_path or file_path.startswith("/"):
+    clean_path = Path(file_path).as_posix()
+    if ".." in clean_path or clean_path.startswith("/"):
         raise HTTPException(status_code=400, detail="Invalid path")
 
+    # Strip common prefixes to ensure correct resolution relative to DATA_DIR
+    # This prevents the ".../data/data/..." issue
+    if clean_path.startswith("documents/"):
+        clean_path = clean_path.replace("documents/", "", 1)
+    if clean_path.startswith("data/"):
+        clean_path = clean_path.replace("data/", "", 1)
+
     # Resolve the full path - try each search directory
-    full_path = DATA_DIR / file_path
+    full_path = DATA_DIR / clean_path
 
     # Security check: ensure path is within data directory (check BEFORE any operations)
     try:
@@ -76,12 +84,12 @@ async def get_document(file_path: str):
     # Check if file exists at exact path
     if not full_path.exists():
         # Try recursive search for filename
-        filename = Path(file_path).name
+        filename = Path(clean_path).name
         found_path = find_document(filename)
         if found_path:
             full_path = found_path
         else:
-            raise HTTPException(status_code=404, detail=f"Document not found: {file_path}")
+            raise HTTPException(status_code=404, detail=f"Document not found: {clean_path}")
 
     if not full_path.is_file():
         raise HTTPException(status_code=400, detail="Not a file")

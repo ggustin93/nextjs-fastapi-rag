@@ -11,6 +11,7 @@ Configuration is loaded from centralized settings in packages.config.
 See packages/config/__init__.py for available environment variables.
 """
 
+import logging
 import os
 import sys
 
@@ -28,6 +29,12 @@ from packages.config import settings
 
 # Load environment variables
 load_dotenv()
+
+# Configure logging with INFO level to show debug logs
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 
 # Initialize FastAPI app
 app = FastAPI(
