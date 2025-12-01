@@ -66,45 +66,33 @@ This lost the **definition-seeking intent** ("C'est quoi" = "What is"). The syst
 
 ## Solution Implemented
 
-### Configuration Changes
+### Code Changes (Complete Removal)
 
-Added three new environment variables to `.env`:
+Based on this analysis, reranking and query reformulation code was **completely removed** from the codebase (not just disabled via config). The simplified pipeline now relies on:
+
+1. **Hybrid search with RRF** - Combines vector similarity and French full-text search
+2. **PostgreSQL-level filtering** - TOC exclusion and similarity threshold
+3. **Original query preservation** - User's query used directly, no reformulation
+
+### Current Configuration
 
 ```env
 # Search Configuration
-SEARCH_SIMILARITY_THRESHOLD=0.20    # Lowered from 0.45 to capture more chunks
-SEARCH_DEFAULT_LIMIT=40             # More chunks for hybrid search to consider
-
-# Feature Toggles (NEW)
-RERANK_ENABLED=false                # Disable FlashRank reranking
-REFORMULATE_QUERY_ENABLED=false     # Use original user query
+SEARCH_SIMILARITY_THRESHOLD=0.25    # Lowered from 0.45 to capture definition chunks
+SEARCH_DEFAULT_LIMIT=30             # Balanced chunk retrieval
+RRF_K=50                            # RRF ranking parameter
+EXCLUDE_TOC=true                    # Filter out TOC chunks at database level
 ```
-
-### Code Changes
-
-1. **`packages/config/__init__.py`**: Added `rerank_enabled` and `reformulate_query_enabled` to `SearchConfig`
-
-2. **`packages/core/agent.py`**: Added conditional checks:
-
-   ```python
-   if settings.search.reformulate_query_enabled:
-       # Reformulate query
-   else:
-       # Use original query
-
-   if settings.search.rerank_enabled and len(results) > 3 and rag_ctx.reranker:
-       # Apply FlashRank reranking
-   else:
-       # Use RRF-sorted results directly
-   ```
 
 ### Why This Works
 
-1. **Disabling reranking** allows the raw hybrid search results (sorted by RRF fusion) to surface the correct chunks. RRF combines vector similarity AND keyword matching, so it can find chunks that mention related terms even if vector similarity is lower.
+1. **Removing reranking** allows the raw hybrid search results (sorted by RRF fusion) to surface the correct chunks. RRF combines vector similarity AND keyword matching, so it can find chunks that mention related terms even if vector similarity is lower.
 
-2. **Disabling reformulation** preserves the original question context, allowing the LLM to understand the user is seeking a definition.
+2. **Removing reformulation** preserves the original question context, allowing the LLM to understand the user is seeking a definition.
 
 3. **Lowering the threshold** ensures more chunks pass the filter, giving the LLM more context to work with.
+
+4. **TOC exclusion at database level** is more efficient and reliable than post-processing filtering.
 
 ---
 
@@ -151,24 +139,15 @@ Automated similarity metrics don't capture real-world query patterns. Test with 
 
 ## Recommended Configuration
 
-For **general-purpose RAG** applications:
+For **French technical documentation** (tested and optimized):
 
 ```env
-# Conservative settings for broad retrieval
-SEARCH_SIMILARITY_THRESHOLD=0.20
-SEARCH_DEFAULT_LIMIT=40
-RERANK_ENABLED=false
-REFORMULATE_QUERY_ENABLED=false
-```
-
-For **keyword-heavy domains** (legal, technical documentation):
-
-```env
-# More aggressive settings with reranking
-SEARCH_SIMILARITY_THRESHOLD=0.30
-SEARCH_DEFAULT_LIMIT=30
-RERANK_ENABLED=true
-REFORMULATE_QUERY_ENABLED=true
+# Simplified pipeline - reranking/reformulation removed from codebase
+SEARCH_SIMILARITY_THRESHOLD=0.25    # Captures definition chunks
+SEARCH_DEFAULT_LIMIT=30             # Balanced retrieval
+RRF_K=50                            # Standard RRF weighting
+EXCLUDE_TOC=true                    # Filter TOC at database level
+MAX_CHUNKS_PER_DOCUMENT=5           # Allow more context per source
 ```
 
 ---
@@ -177,11 +156,13 @@ REFORMULATE_QUERY_ENABLED=true
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SEARCH_SIMILARITY_THRESHOLD` | 0.4 | Minimum vector similarity (0.0-1.0) |
-| `SEARCH_DEFAULT_LIMIT` | 20 | Number of chunks from hybrid search |
-| `MAX_CHUNKS_PER_DOCUMENT` | 3 | Limit chunks per source document |
-| `RERANK_ENABLED` | true | Enable/disable FlashRank reranking |
-| `REFORMULATE_QUERY_ENABLED` | true | Enable/disable LLM query reformulation |
+| `SEARCH_SIMILARITY_THRESHOLD` | 0.25 | Minimum vector similarity (0.0-1.0) |
+| `SEARCH_DEFAULT_LIMIT` | 30 | Max chunks from hybrid search |
+| `MAX_CHUNKS_PER_DOCUMENT` | 5 | Limit chunks per source document |
+| `RRF_K` | 50 | RRF ranking parameter (lower = favor top results) |
+| `EXCLUDE_TOC` | true | Filter out TOC chunks at database level |
+
+> **Note:** Reranking and query reformulation were **removed** from the codebase after testing showed they hurt accuracy for French technical content. The hybrid search with RRF provides good ranking without these features.
 
 ---
 

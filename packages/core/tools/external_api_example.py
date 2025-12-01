@@ -151,13 +151,13 @@ external_api_config = ExternalAPIConfig(
 # Create RAG context with optional external API config
 class RAGContext:
     db_client: SupabaseRestClient
-    reranker: Optional[Any] = None
+    embedder: Optional[Any] = None
     domain_config: Optional[DomainConfig] = None
     external_api_config: Optional[ExternalAPIConfig] = None  # OPTIONAL
 
 rag_context = RAGContext(
     db_client=db_client,
-    reranker=reranker,
+    embedder=embedder,
     domain_config=domain_config,
     external_api_config=external_api_config if external_api_config.enabled else None,
 )

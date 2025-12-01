@@ -2,7 +2,10 @@
 RAG CLI Agent with PostgreSQL/PGVector
 =======================================
 Text-based CLI agent that searches through knowledge base using semantic similarity.
-Uses deterministic query reformulation for improved semantic matching.
+Uses hybrid search (vector + French FTS) with RRF ranking for optimal retrieval.
+
+Note: Reranking and query reformulation were removed after testing showed they
+hurt accuracy for French technical content. See docs/TROUBLESHOOT.md for details.
 """
 
 import asyncio
@@ -20,21 +23,6 @@ from packages.core.config import DomainConfig, QueryExpansionConfig
 from packages.core.types import RAGContext, WeatherConfig
 from packages.core.weather_tool import get_weather
 from packages.utils.supabase_client import SupabaseRestClient
-
-# FlashRank for local re-ranking (lazy-loaded to avoid startup cost)
-_reranker = None
-
-
-def get_reranker():
-    """Lazy-load FlashRank reranker to avoid startup cost."""
-    global _reranker
-    if _reranker is None:
-        from flashrank import Ranker
-
-        _reranker = Ranker(model_name="ms-marco-MiniLM-L-12-v2", cache_dir="./.flashrank_cache")
-        logger.info("FlashRank reranker initialized")
-    return _reranker
-
 
 # Load environment variables
 load_dotenv(".env")
@@ -60,6 +48,9 @@ async def create_rag_context(domain_config: Optional[DomainConfig] = None) -> RA
     are optional - creates a generic RAG agent by default. For domain-specific
     behavior, pass a DomainConfig with query expansion settings.
 
+    Dependencies are initialized once and cached in the context to avoid
+    repeated initialization overhead per search query.
+
     Args:
         domain_config: Optional domain-specific configuration for query expansion.
                       If None, uses generic RAG behavior.
@@ -80,177 +71,27 @@ async def create_rag_context(domain_config: Optional[DomainConfig] = None) -> RA
     await db_client.initialize()
     logger.info("RAGContext: Supabase client initialized")
 
-    # Initialize re-ranker (lazy-loaded through get_reranker())
-    from flashrank import Ranker
+    # Initialize embedder (cached in context to avoid per-query client init)
+    from packages.ingestion.embedder import create_embedder
 
-    reranker = Ranker(model_name="ms-marco-MiniLM-L-12-v2", cache_dir="./.flashrank_cache")
-    logger.info("RAGContext: FlashRank reranker initialized")
+    embedder = create_embedder()
+    logger.info("RAGContext: Embedder initialized")
 
     # Create context with all dependencies
+    # Note: Reranking removed - hybrid search with RRF provides good ranking
+    # See TROUBLESHOOT.md for evidence that reranking hurt accuracy
     return RAGContext(
         db_client=db_client,
-        reranker=reranker,
+        embedder=embedder,  # Cached for query embedding
         domain_config=domain_config,  # Optional - None for generic RAG
         weather_config=WeatherConfig(),  # Weather API config with defaults
         last_search_sources=[],
     )
 
 
-def reformulate_query(query: str) -> str:
-    """
-    Reformulate query for better semantic matching while preserving intent.
-
-    This approach:
-    1. Removes interrogative patterns and filler words
-    2. Preserves semantic markers (de, du, tous, etc.)
-    3. Adds definition-seeking terms for "what is" type questions
-    4. Keeps the query focused on the actual topic
-
-    Examples:
-        "C'est quoi un chantier de type D ?" → "définition chantier de type D critères"
-        "Quels sont tous les critères du type D ?" → "tous les critères du type D"
-        "Quelle est la durée maximale ?" → "durée maximale"
-
-    Args:
-        query: The user's question in French
-
-    Returns:
-        Query optimized for semantic search
-    """
-    from packages.ingestion.french_stopwords import (
-        FRENCH_STOPWORDS,
-        QUESTION_PATTERNS,
-        SEMANTIC_MARKERS,
-    )
-
-    query_lower = query.lower().strip()
-
-    # Detect if user is asking for a definition/explanation
-    definition_patterns = [
-        "c'est quoi",
-        "qu'est-ce",
-        "qu'est ce",
-        "what is",
-        "what are",
-        "définition",
-        "definition",
-        "signifie",
-        "veut dire",
-        "explain",
-        "expliquer",
-    ]
-
-    is_definition_question = any(pattern in query_lower for pattern in definition_patterns)
-
-    # Normalize: lowercase, strip whitespace and punctuation
-    q = query_lower.rstrip("?!.")
-
-    # Remove question patterns
-    for pattern in QUESTION_PATTERNS:
-        if pattern in q:
-            q = q.replace(pattern, "").strip()
-
-    # Tokenize and filter stopwords while preserving semantic markers
-    tokens = q.split()
-    filtered_tokens = []
-
-    for token in tokens:
-        # Clean punctuation from token for comparison
-        clean_token = token.strip("'\".,;:!?")
-
-        # Keep token if:
-        # 1. It's a semantic marker (de, du, tous, etc.)
-        # 2. It's not a stopword
-        # 3. It's not empty
-        if clean_token in SEMANTIC_MARKERS or (clean_token not in FRENCH_STOPWORDS and clean_token):
-            filtered_tokens.append(token)
-
-    result = " ".join(filtered_tokens).strip()
-
-    # If it's a definition question, add terms that help find definitions/explanations
-    # This improves embedding similarity with chunks containing definitions
-    if is_definition_question and result:
-        result = f"définition {result} critères caractéristiques"
-        logger.debug(f"Definition question detected, enhanced query: '{result}'")
-
-    # Only log if query was actually changed
-    if result != query:
-        logger.debug(f"Query reformulated: '{query}' → '{result}'")
-
-    return result if result else query
-
-
 # Initialize domain config with query expansion enabled (for backward compatibility)
 # Users can set this to DomainConfig() or None for generic RAG
 domain_config = DomainConfig(query_expansion=QueryExpansionConfig())
-
-
-def _build_rerank_query(original_query: str) -> str:
-    """
-    Build an optimized query for the reranker (cross-encoder).
-
-    The reranker works best with natural language queries that express
-    the user's intent clearly. This function enhances the query to help
-    find definition-style and criteria-based content.
-
-    Strategies applied:
-    1. Keep the original question (preserves intent and context)
-    2. Detect question types and add relevant search terms
-    3. Add definition-seeking terms for "what is" type questions
-
-    Args:
-        original_query: The user's original question
-
-    Returns:
-        Enhanced query optimized for cross-encoder reranking
-    """
-    query_lower = original_query.lower()
-
-    # Patterns indicating user wants a definition or explanation
-    definition_patterns = [
-        "c'est quoi",
-        "qu'est-ce",
-        "what is",
-        "what are",
-        "définition",
-        "definition",
-        "signifie",
-        "veut dire",
-        "explain",
-        "expliquer",
-        "décrire",
-        "describe",
-    ]
-
-    # Patterns indicating user wants criteria or conditions
-    criteria_patterns = [
-        "critères",
-        "criteria",
-        "conditions",
-        "requirements",
-        "exigences",
-        "règles",
-        "rules",
-        "comment",
-        "how to",
-        "procédure",
-        "procedure",
-    ]
-
-    # Start with the original query
-    query_parts = [original_query]
-
-    # If asking for a definition, add terms that help find explanatory content
-    if any(pattern in query_lower for pattern in definition_patterns):
-        # These terms help the reranker find content that defines/explains things
-        query_parts.append("définition description caractéristiques")
-
-    # If asking about criteria/conditions, add terms for finding structured content
-    if any(pattern in query_lower for pattern in criteria_patterns):
-        query_parts.append("conditions critères exigences")
-
-    # Combine parts - the reranker will score based on relevance to any part
-    return " ".join(query_parts)
 
 
 def expand_query_for_fts(query: str, config: Optional[DomainConfig] = None) -> str:
@@ -265,7 +106,7 @@ def expand_query_for_fts(query: str, config: Optional[DomainConfig] = None) -> s
     synonyms and criteria (e.g., for French FTS that drops single letters as stopwords).
 
     Args:
-        query: The search query (already reformulated)
+        query: The search query
         config: Optional domain configuration. If None or config.query_expansion is None,
                 no expansion is performed (generic RAG behavior)
 
@@ -442,24 +283,17 @@ async def search_knowledge_base(
         # Get RAG context from deps (dependency injection)
         rag_ctx: RAGContext = ctx.deps
 
-        # Use db_client from context instead of global rest_client
-        # Reformulate query for better semantic matching (can be disabled)
-        if settings.search.reformulate_query_enabled:
-            search_query = reformulate_query(query)
-            logger.debug(f"Query reformulated: '{query}' → '{search_query}'")
-        else:
-            search_query = query
-            logger.debug(f"Query reformulation disabled, using original: '{query}'")
+        # Use original query directly - reformulation was found to lose intent
+        # See TROUBLESHOOT.md: "C'est quoi" → "chantier de type d" lost definition context
+        search_query = query
 
         # Expand query for FTS (optional - uses domain_config from context if available)
         # "type D" → "type D OR dispense OR 50 m² OR 24 heures"
         fts_query = expand_query_for_fts(search_query, rag_ctx.domain_config)
 
-        # Generate embedding for query
-        from packages.ingestion.embedder import create_embedder
-
-        embedder = create_embedder()
-        query_embedding = await embedder.embed_query(search_query)
+        # Generate embedding for query using cached embedder from context
+        # This avoids creating a new OpenAI client instance per query
+        query_embedding = await rag_ctx.embedder.embed_query(search_query)
 
         # Use hybrid search (vector + keyword) for better recall
         # FTS uses expanded query; vector uses original for semantic matching
@@ -469,6 +303,8 @@ async def search_knowledge_base(
             query_embedding=query_embedding,
             limit=limit,
             similarity_threshold=similarity_threshold,
+            exclude_toc=settings.search.exclude_toc,
+            rrf_k=settings.search.rrf_k,
         )
 
         # DEBUG: Log retrieval results
@@ -487,77 +323,25 @@ async def search_knowledge_base(
         # Format results for response
         if not results:
             logger.warning("No chunks found matching similarity threshold")
-            return "Aucune information pertinente trouvée dans la base de connaissances pour cette requête."
+            return "⚠️ HORS PÉRIMÈTRE: Aucune information pertinente trouvée dans la base de connaissances pour cette requête. Cette question semble être en dehors du périmètre de la documentation disponible."
 
-        # Results from DB are already sorted by similarity (highest first)
+        # Results from DB are already sorted by RRF score (hybrid) or similarity (vector)
+        # TOC chunks are filtered at database level via exclude_toc=True (default)
+        # Note: Reranking removed - FlashRank gave 0.0 scores to definition chunks
+        # See TROUBLESHOOT.md for evidence that RRF-sorted results work better
         logger.info(f"Retrieved {len(results)} chunks from knowledge base")
 
-        # Filter out TOC chunks that pollute search results
-        original_count = len(results)
-        filtered_results = [r for r in results if not is_toc_chunk(r.get("content", ""))]
+        # Check if results are actually relevant using max similarity
+        # Low max similarity suggests the query is likely out of scope
+        max_similarity = max((r.get("similarity", 0) for r in results), default=0)
 
-        if len(filtered_results) < len(results):
-            toc_count = original_count - len(filtered_results)
-            logger.info(
-                f"TOC filter: removed {toc_count} TOC chunks, {len(filtered_results)} remaining"
+        # If best result is below threshold, this is likely an out-of-scope question
+        # Configurable via OUT_OF_SCOPE_THRESHOLD env var (default: 0.40)
+        if max_similarity < settings.search.out_of_scope_threshold:
+            logger.warning(
+                f"Low relevance results - likely out of scope query. Max similarity: {max_similarity:.2f}"
             )
-
-        # Fallback: if all chunks were TOC, use original results with warning
-        if not filtered_results and results:
-            logger.warning("All chunks filtered as TOC, using original results")
-            filtered_results = results
-
-        # Use filtered results for response
-        results = filtered_results
-
-        # Re-rank results using FlashRank for better precision (can be disabled)
-        if settings.search.rerank_enabled and len(results) > 3 and rag_ctx.reranker:
-            try:
-                from flashrank import RerankRequest
-
-                # Use reranker from context (already initialized)
-                reranker = rag_ctx.reranker
-
-                # Format results for FlashRank
-                passages = [
-                    {
-                        "id": idx,
-                        "text": r.get("content", ""),
-                        "meta": {
-                            "document_title": r.get("document_title", ""),
-                            "document_source": r.get("document_source", ""),
-                            "similarity": r.get("similarity", 0),
-                        },
-                    }
-                    for idx, r in enumerate(results)
-                ]
-
-                # Build rerank query - always use original query for better context
-                rerank_query = _build_rerank_query(query)
-                logger.debug(f"Rerank query: {rerank_query}")
-
-                # Re-rank with the enhanced query
-                rerank_request = RerankRequest(query=rerank_query, passages=passages)
-                reranked = reranker.rerank(rerank_request)
-
-                # Map re-ranked results back to original format
-                reranked_results = []
-                for item in reranked[:15]:  # Take top 15 re-ranked results (increased from 10)
-                    original_idx = item.get("id", 0)
-                    if 0 <= original_idx < len(results):
-                        result = results[original_idx].copy()
-                        result["rerank_score"] = item.get("score", 0)
-                        reranked_results.append(result)
-
-                if reranked_results:
-                    logger.info(
-                        f"FlashRank re-ranking: {len(results)} → {len(reranked_results)} results, "
-                        f"top score: {reranked_results[0].get('rerank_score', 0):.3f}"
-                    )
-                    results = reranked_results
-
-            except Exception as e:
-                logger.warning(f"FlashRank re-ranking failed, using hybrid search results: {e}")
+            return f"⚠️ PERTINENCE FAIBLE: Les résultats trouvés ont une pertinence maximale de {int(max_similarity * 100)}%, ce qui suggère que cette question est probablement HORS DU PÉRIMÈTRE de la base de connaissances. Les documents trouvés ne semblent pas répondre directement à cette question."
 
         # DEBUG: Log chunk details
         for idx, row in enumerate(results[:3]):  # Log first 3 chunks

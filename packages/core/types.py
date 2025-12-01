@@ -18,10 +18,17 @@ class WeatherConfig:
 
 @dataclass
 class RAGContext:
-    """RAG agent runtime context with dependency injection."""
+    """RAG agent runtime context with dependency injection.
+
+    All dependencies are initialized once and reused across search operations
+    to avoid repeated client/model initialization overhead.
+
+    Note: Reranker was removed - hybrid search with RRF provides good ranking.
+    See docs/TROUBLESHOOT.md for evidence that reranking hurt accuracy.
+    """
 
     db_client: SupabaseRestClient
-    reranker: Optional[Any] = None
+    embedder: Optional[Any] = None  # Cached EmbeddingGenerator for query embedding
     domain_config: Optional[DomainConfig] = None
     weather_config: WeatherConfig = field(default_factory=WeatherConfig)
     last_search_sources: list = field(default_factory=list)

@@ -179,10 +179,9 @@ sequenceDiagram
 
     Agent->>Tools: search_knowledge_base(query)
     activate Tools
-    Tools->>DB: Hybrid Search (Vector + FTS)
-    DB-->>Tools: 20 chunks
-    Tools->>Tools: Filter TOC + FlashRank
-    Tools-->>Agent: Top 10 sources
+    Tools->>DB: Hybrid Search (Vector + FTS + RRF)
+    DB-->>Tools: Ranked chunks (TOC filtered)
+    Tools-->>Agent: Top sources with similarity scores
     deactivate Tools
 
     Agent->>LLM: Generate response with context
@@ -214,7 +213,7 @@ This sequence diagram shows how a chat request flows through the system with pro
 
 ## RAG Search Pipeline
 
-Our RAG system uses a sophisticated 4-stage pipeline to ensure high-quality, relevant responses:
+Our RAG system uses a streamlined 3-stage pipeline optimized for French technical content:
 
 ### Pipeline Overview
 
@@ -222,29 +221,23 @@ Our RAG system uses a sophisticated 4-stage pipeline to ensure high-quality, rel
 flowchart TD
     subgraph Input["🔍 Stage 1: Query Processing"]
         Query[User Query]
-        Query --> Reform[Reformulate Query<br/>semantic matching]
         Query --> Expand[Expand Query<br/>domain synonyms]
-        Reform --> Embed[Generate Embeddings]
+        Query --> Embed[Generate Embeddings]
     end
 
-    subgraph Search["🔎 Stage 2: Hybrid Search - 20 Chunks"]
+    subgraph Search["🔎 Stage 2: Hybrid Search"]
         Embed --> Vector[Vector Similarity<br/>Semantic Search]
         Expand --> FTS[Full-Text Search<br/>French + Keyword]
         Vector --> RRF[Reciprocal Rank Fusion]
         FTS --> RRF
-        RRF --> Results20[20 Ranked Chunks]
+        RRF --> Results[Ranked Chunks]
     end
 
     subgraph Filter["🧹 Stage 3: Quality Filtering"]
-        Results20 --> TOC{Filter TOC<br/>Chunks?}
+        Results --> TOC{Filter TOC<br/>Chunks?}
         TOC -->|Remove| Discard[❌ Discard TOC]
         TOC -->|Keep| Clean[Clean Results]
-    end
-
-    subgraph Rerank["⭐ Stage 4: Re-ranking - Top 10"]
-        Clean --> Flash[FlashRank Re-ranking<br/>Precision Optimization]
-        Flash --> Top10[Top 10 Most Relevant]
-        Top10 --> LLM[🤖 Feed ALL 10 to LLM]
+        Clean --> LLM[🤖 Feed to LLM]
     end
 
     LLM --> Response[📝 Response with Citations]
@@ -252,34 +245,27 @@ flowchart TD
     style Input fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
     style Search fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
     style Filter fill:#fff3e0,stroke:#f57c00,stroke-width:2px
-    style Rerank fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
     style Response fill:#ffebee,stroke:#c62828,stroke-width:2px
 ```
 
 ### Stage Details
 
 **🔍 Stage 1: Query Processing**
-- **Query Reformulation**: Transforms user questions for better semantic matching
-  - Example: "Quelle est la superficie..." → "la valeur de la superficie..."
 - **Query Expansion**: Adds domain-specific synonyms for full-text search
   - Example: "type D" → "type D OR dispense OR 50 m² OR 24 heures"
 - **Embedding Generation**: Creates vector representation for semantic search
+- **Direct Query Use**: User's original query preserved for intent accuracy
 
-**🔎 Stage 2: Hybrid Search (20 Chunks)**
+**🔎 Stage 2: Hybrid Search**
 - **Vector Similarity**: Semantic search using embeddings (finds conceptually similar content)
 - **Full-Text Search**: Keyword matching with French language support
 - **RRF Fusion**: Combines both approaches using Reciprocal Rank Fusion algorithm
-- **Result**: 20 candidate chunks ranked by relevance
+- **Result**: Ranked chunks combining semantic understanding with keyword precision
 
 **🧹 Stage 3: Quality Filtering**
 - **TOC Detection**: Removes table of contents chunks that pollute results
-- **Content Validation**: Ensures only meaningful content passes through
-- **Result**: Clean, relevant chunks ready for re-ranking
-
-**⭐ Stage 4: Re-ranking (Top 10)**
-- **FlashRank**: Advanced re-ranking model for precision optimization
-- **Top Selection**: Keeps the 10 most relevant chunks
-- **LLM Context**: ALL 10 chunks fed to LLM with full context
+- **Similarity Threshold**: Filters low-relevance chunks at the database level
+- **LLM Context**: Filtered chunks fed to LLM with full context
 - **Result**: Response with numbered source citations [1], [2], etc.
 
 ### Configuration
@@ -288,13 +274,14 @@ Customize retrieval behavior via environment variables:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SEARCH_DEFAULT_LIMIT` | 20 | Chunks retrieved in Stage 2 |
-| `SEARCH_SIMILARITY_THRESHOLD` | 0.4 | Minimum similarity (40%) |
-| `MAX_CHUNKS_PER_DOCUMENT` | 3 | Max chunks per document |
-| `RERANK_ENABLED` | true | Enable FlashRank reranking |
-| `REFORMULATE_QUERY_ENABLED` | true | Enable LLM query reformulation |
+| `SEARCH_DEFAULT_LIMIT` | 30 | Max chunks from hybrid search |
+| `SEARCH_SIMILARITY_THRESHOLD` | 0.25 | Minimum similarity (25%) |
+| `OUT_OF_SCOPE_THRESHOLD` | 0.40 | Below this = question likely out of scope |
+| `MAX_CHUNKS_PER_DOCUMENT` | 5 | Limit per source document |
+| `RRF_K` | 50 | RRF ranking parameter |
+| `EXCLUDE_TOC` | true | Filter out TOC chunks |
 
-> **💡 Tip:** For definition-seeking queries or domain-specific content, try disabling reranking and reformulation. See [Troubleshooting Guide](docs/TROUBLESHOOT.md) for details.
+> **📖 Note:** This simplified pipeline was optimized after testing showed that reranking and query reformulation hurt accuracy for French technical content. See [Troubleshooting Guide](docs/TROUBLESHOOT.md) for details.
 
 See [Configuration](#configuration) section for more details.
 
@@ -444,16 +431,15 @@ LLM_BASE_URL=https://api.openai.com/v1
 EMBEDDING_MODEL=text-embedding-3-small
 
 # Search Settings (Optional)
-SEARCH_SIMILARITY_THRESHOLD=0.4     # Minimum similarity (0.0-1.0)
-SEARCH_DEFAULT_LIMIT=20             # Chunks from hybrid search
-MAX_CHUNKS_PER_DOCUMENT=3           # Limit per source document
-
-# Feature Toggles (Optional)
-RERANK_ENABLED=true                 # Enable FlashRank reranking
-REFORMULATE_QUERY_ENABLED=true      # Enable LLM query reformulation
+SEARCH_SIMILARITY_THRESHOLD=0.25    # Minimum similarity (0.0-1.0)
+OUT_OF_SCOPE_THRESHOLD=0.40         # Below this = out of scope question
+SEARCH_DEFAULT_LIMIT=30             # Max chunks from hybrid search
+MAX_CHUNKS_PER_DOCUMENT=5           # Limit per source document
+RRF_K=50                            # RRF ranking parameter
+EXCLUDE_TOC=true                    # Filter out TOC chunks
 ```
 
-> **📖 Troubleshooting:** If retrieval quality is poor for definition-seeking queries, see [docs/TROUBLESHOOT.md](docs/TROUBLESHOOT.md).
+> **📖 Troubleshooting:** For retrieval quality issues, see [docs/TROUBLESHOOT.md](docs/TROUBLESHOOT.md).
 
 ## Customization
 
