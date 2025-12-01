@@ -7,7 +7,7 @@ import bundleAnalyzer from "@next/bundle-analyzer";
  * Features:
  * - Bundle analyzer (run with ANALYZE=true npm run build)
  * - Image optimization with modern formats
- * - Turbopack for faster development
+ * - Stable webpack bundler for react-pdf compatibility
  */
 
 const withBundleAnalyzer = bundleAnalyzer({
@@ -15,7 +15,7 @@ const withBundleAnalyzer = bundleAnalyzer({
 });
 
 const nextConfig: NextConfig = {
-  turbopack: {},
+  // Turbopack disabled for react-pdf compatibility (Next.js 15 uses webpack by default)
 
   // Image optimization
   images: {
