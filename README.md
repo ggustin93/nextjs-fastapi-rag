@@ -5,7 +5,7 @@ A production-ready, domain-agnostic RAG (Retrieval-Augmented Generation) system 
 ## Features
 
 - **Streaming Chat** - Real-time responses via Server-Sent Events (SSE)
-- **Hybrid Search** - Vector similarity + French full-text search with re-ranking
+- **Hybrid Search** - Vector similarity + French full-text search with RRF fusion
 - **Multi-Format Ingestion** - PDF, Word, HTML, Markdown via Docling
 - **Web Scraping** - Crawl4AI for automated content extraction
 - **Source Citations** - Every response includes ranked document sources
@@ -17,7 +17,7 @@ A production-ready, domain-agnostic RAG (Retrieval-Augmented Generation) system 
 
 | Layer | Technology |
 |-------|------------|
-| Frontend | Next.js 14, TypeScript, Tailwind CSS, shadcn/ui |
+| Frontend | Next.js 15.5.6, TypeScript, Tailwind CSS, shadcn/ui |
 | Backend | FastAPI, PydanticAI, Uvicorn, AsyncPG |
 | Database | PostgreSQL + pgvector |
 | AI/ML | OpenAI, Docling, Crawl4AI |
@@ -155,7 +155,7 @@ Our RAG system uses a layered architecture with sophisticated patterns:
 - **Streaming SSE**: Real-time progressive updates via Server-Sent Events (not WebSocket)
 - **Dependency Injection**: Type-safe context via PydanticAI RunContext
 - **Cache-First Strategy**: AsyncLRUCache before database queries
-- **4-Stage RAG Pipeline**: See [RAG Search Pipeline](#rag-search-pipeline) section below for details
+- **3-Stage RAG Pipeline**: See [RAG Search Pipeline](#rag-search-pipeline) section below for details
 - **Multi-Provider LLM**: Configuration-driven (OpenAI, Ollama, Chutes.ai)
 - **Tool System**: Extensible external API integration pattern
 
@@ -170,7 +170,7 @@ sequenceDiagram
     participant DB as PostgreSQL<br/>+ pgvector
     participant LLM as OpenAI API
 
-    FE->>API: POST /api/v1/chat/stream<br/>{message, session_id}
+    FE->>API: POST /api/v1/stream<br/>{message, session_id}
     activate API
 
     API->>Agent: Create RAGContext + Agent instance
@@ -454,44 +454,74 @@ export RAG_SYSTEM_PROMPT="Tu es un expert juridique belge..."
 
 Default: Generic French knowledge assistant with numbered source citations.
 
-### Optional Domain Configuration
+### Adding Custom Tools
 
-The system works generically by default. Add domain-specific query expansion:
+The system uses a tool registry pattern for easy extensibility:
 
 ```python
-from packages.core.config import DomainConfig, QueryExpansionConfig
+from packages.core.tools import register_tool
+from pydantic_ai import RunContext
+from packages.core.types import RAGContext
 
-# Generic RAG (default)
-domain_config = DomainConfig()
+# 1. Define your tool function
+async def my_custom_tool(
+    ctx: RunContext[RAGContext],
+    query: str
+) -> str:
+    """Tool description for the LLM."""
+    # Your tool logic here
+    return "Result"
 
-# With domain-specific query expansion
-domain_config = DomainConfig(
-    query_expansion=QueryExpansionConfig(
-        type_d={"synonyms": [...], "criteria": [...]}
-    )
+# 2. Register the tool
+register_tool("my_tool", my_custom_tool)
+
+# 3. Enable via environment variable
+# ENABLED_TOOLS='["weather", "my_tool"]'
+```
+
+**Configuration Options:**
+```bash
+# Enable all tools (default)
+# ENABLED_TOOLS not set or ENABLED_TOOLS=null
+
+# Enable specific tools only
+ENABLED_TOOLS='["weather", "my_tool"]'
+
+# Search only (no external API tools)
+ENABLED_TOOLS='[]'
+```
+
+See `packages/core/tools/weather_tool.py` for a complete implementation example.
+
+### Agent Configuration
+
+Create custom agent instances using the factory pattern:
+
+```python
+from packages.core.factory import create_rag_agent
+
+# Default configuration
+agent = create_rag_agent()
+
+# Custom configuration
+agent = create_rag_agent(
+    system_prompt="Custom instructions",
+    enabled_tools=["weather"]  # or [] for search only
 )
 ```
 
-### External API Integration
-
-Add external API tools following the pattern in `packages/core/tools/external_api_example.py`:
-
-1. Create type-safe Pydantic models for API responses
-2. Define configuration with feature flags
-3. Implement async tool function with dependency injection
-4. Register conditionally based on configuration
-
-See weather API example for complete implementation pattern.
+The factory ensures consistent configuration across CLI, API, and tests.
 
 ## Design Decisions
 
 | Decision | Rationale |
 |----------|-----------|
+| **Tool Registry Pattern** | Eliminates duplication, enables dynamic configuration |
+| **Agent Factory Pattern** | Single source of truth for agent creation |
 | **Domain-Agnostic Core** | Generic by default, optional domain customization |
 | **Dependency Injection** | Type-safe context via PydanticAI RunContext |
-| **Optional Configuration** | All domain features opt-in, not required |
 | **PydanticAI** | Type safety, simpler than LangChain |
-| **Hybrid Search** | Vector + FTS + re-ranking for better retrieval |
+| **Hybrid Search** | Vector + FTS + RRF fusion for better retrieval |
 | **pgvector** | Self-hosted, ACID compliance |
 | **Docling** | Better PDF parsing than alternatives |
 | **SSE** | Simpler than WebSocket for streaming chat |
