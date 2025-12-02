@@ -101,8 +101,8 @@ class TestSystemPrompt:
         prompt_lower = self._get_system_prompt(agent_mod).lower()
         # Should instruct to search knowledge base before answering (French)
         assert "base de connaissances" in prompt_lower or "base de données" in prompt_lower
-        # Check for search instruction - prompt uses "cherché" (past participle)
-        assert "cherché" in prompt_lower or "appeler search" in prompt_lower
+        # Check for search instruction - prompt mentions search_knowledge_base tool
+        assert "search_knowledge_base" in prompt_lower or "recherche" in prompt_lower
 
     def test_system_prompt_handles_missing_info(self):
         """System prompt should handle missing information gracefully."""

@@ -24,9 +24,9 @@ describe('ToolCallBadge', () => {
 
     render(<ToolCallBadge toolCalls={toolCalls} />);
 
-    expect(screen.getByText('Weather')).toBeInTheDocument();
+    expect(screen.getByText('Weather API')).toBeInTheDocument();
     expect(screen.getByText('🌤️')).toBeInTheDocument();
-    expect(screen.getByText('(150ms)')).toBeInTheDocument();
+    expect(screen.getByText('150ms')).toBeInTheDocument();
   });
 
   it('should render knowledge search tool badge', () => {
@@ -42,7 +42,7 @@ describe('ToolCallBadge', () => {
 
     expect(screen.getByText('Knowledge Search')).toBeInTheDocument();
     expect(screen.getByText('📚')).toBeInTheDocument();
-    expect(screen.getByText('(200ms)')).toBeInTheDocument();
+    expect(screen.getByText('200ms')).toBeInTheDocument();
   });
 
   it('should render multiple tool call badges', () => {
@@ -61,7 +61,7 @@ describe('ToolCallBadge', () => {
 
     render(<ToolCallBadge toolCalls={toolCalls} />);
 
-    expect(screen.getByText('Weather')).toBeInTheDocument();
+    expect(screen.getByText('Weather API')).toBeInTheDocument();
     expect(screen.getByText('Knowledge Search')).toBeInTheDocument();
   });
 
@@ -76,23 +76,23 @@ describe('ToolCallBadge', () => {
 
     render(<ToolCallBadge toolCalls={toolCalls} />);
 
-    const badge = screen.getByText('Weather').closest('button');
+    const badge = screen.getByText('Weather API').closest('button');
     expect(badge).toBeInTheDocument();
 
-    // Initially, arguments should not be visible
-    expect(screen.queryByText('Arguments:')).not.toBeInTheDocument();
+    // Initially, parameters should not be visible
+    expect(screen.queryByText('Parameters')).not.toBeInTheDocument();
 
     // Click to expand
     fireEvent.click(badge!);
-    expect(screen.getByText('Arguments:')).toBeInTheDocument();
+    expect(screen.getByText('Parameters')).toBeInTheDocument();
 
-    // Arguments should contain the tool args
+    // Parameters should contain the tool args
     expect(screen.getByText(/location/)).toBeInTheDocument();
     expect(screen.getByText(/include_forecast/)).toBeInTheDocument();
 
     // Click again to collapse
     fireEvent.click(badge!);
-    expect(screen.queryByText('Arguments:')).not.toBeInTheDocument();
+    expect(screen.queryByText('Parameters')).not.toBeInTheDocument();
   });
 
   it('should handle unknown tool names gracefully', () => {
@@ -106,8 +106,8 @@ describe('ToolCallBadge', () => {
 
     render(<ToolCallBadge toolCalls={toolCalls} />);
 
-    // Should display the tool name as-is
-    expect(screen.getByText('unknown_tool')).toBeInTheDocument();
+    // Should display fallback display name for unknown tools
+    expect(screen.getByText('Tool')).toBeInTheDocument();
     // Should show a generic tool icon
     expect(screen.getByText('🔧')).toBeInTheDocument();
   });
@@ -122,7 +122,7 @@ describe('ToolCallBadge', () => {
 
     render(<ToolCallBadge toolCalls={toolCalls} />);
 
-    expect(screen.getByText('Weather')).toBeInTheDocument();
+    expect(screen.getByText('Weather API')).toBeInTheDocument();
     // Should not show execution time
     expect(screen.queryByText(/\d+ms/)).not.toBeInTheDocument();
   });
@@ -138,13 +138,13 @@ describe('ToolCallBadge', () => {
 
     render(<ToolCallBadge toolCalls={toolCalls} />);
 
-    const badge = screen.getByText('Weather').closest('button');
+    const badge = screen.getByText('Weather API').closest('button');
     expect(badge).toBeInTheDocument();
 
     // Click to try expanding
     fireEvent.click(badge!);
 
-    // Should not show expandable arguments for empty args
-    expect(screen.queryByText('Arguments:')).not.toBeInTheDocument();
+    // Should not show expandable parameters for empty args
+    expect(screen.queryByText('Parameters')).not.toBeInTheDocument();
   });
 });
