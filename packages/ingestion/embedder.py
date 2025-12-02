@@ -7,45 +7,21 @@ via centralized configuration in packages.config.
 
 import asyncio
 import logging
-import os
 from datetime import datetime
 from typing import List, Optional
 
 from dotenv import load_dotenv
 from openai import APIError, RateLimitError
 
+from packages.config import settings
+
+from ..utils.providers import get_embedding_client
 from .chunker import DocumentChunk
-
-# Import flexible providers and settings
-try:
-    from packages.config import settings
-
-    from ..utils.providers import get_embedding_client, get_embedding_model
-except ImportError:
-    # For direct execution or testing
-    import sys
-
-    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    from packages.config import settings
-    from packages.utils.providers import get_embedding_client, get_embedding_model
 
 # Load environment variables
 load_dotenv()
 
 logger = logging.getLogger(__name__)
-
-# Lazy initialization to avoid requiring API keys at import time
-embedding_client = None
-EMBEDDING_MODEL = None
-
-
-def _get_embedding_client():
-    """Get embedding client with lazy initialization."""
-    global embedding_client, EMBEDDING_MODEL
-    if embedding_client is None:
-        embedding_client = get_embedding_client()
-        EMBEDDING_MODEL = get_embedding_model()
-    return embedding_client, EMBEDDING_MODEL
 
 
 class EmbeddingGenerator:
@@ -97,7 +73,7 @@ class EmbeddingGenerator:
     def client(self):
         """Lazy load embedding client on first access."""
         if self._client is None:
-            self._client, _ = _get_embedding_client()
+            self._client = get_embedding_client()
         return self._client
 
     async def generate_embedding(self, text: str) -> List[float]:
@@ -208,6 +184,9 @@ class EmbeddingGenerator:
         for text in texts:
             try:
                 if not text or not text.strip():
+                    logger.warning(
+                        "Empty text provided, using zero vector (may impact search quality)"
+                    )
                     embeddings.append([0.0] * self.config["dimensions"])
                     continue
 
@@ -219,6 +198,7 @@ class EmbeddingGenerator:
 
             except Exception as e:
                 logger.error(f"Failed to embed text: {e}")
+                logger.warning("Using zero vector as fallback (may impact search quality)")
                 # Use zero vector as fallback
                 embeddings.append([0.0] * self.config["dimensions"])
 
@@ -283,6 +263,9 @@ class EmbeddingGenerator:
 
             except Exception as e:
                 logger.error(f"Failed to process batch {i // self.batch_size + 1}: {e}")
+                logger.warning(
+                    f"Using zero vectors for {len(batch_chunks)} chunks (may impact search quality)"
+                )
 
                 # Add chunks without embeddings as fallback
                 for chunk in batch_chunks:

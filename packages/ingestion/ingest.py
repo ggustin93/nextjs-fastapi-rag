@@ -5,21 +5,23 @@ Main ingestion script for processing documents into vector DB.
 import argparse
 import asyncio
 import glob
-import json
 import logging
 import os
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
 from dotenv import load_dotenv
 
-from .chunker import ChunkingConfig, DocumentChunk, create_chunker
+from .chunker import ChunkingConfig, create_chunker
 from .embedder import create_embedder
+from .extractors.metadata_extractor import MetadataExtractor
 from .models import IngestionConfig, IngestionResult
+from .persistence.postgres_persistence import PostgresPersistence
+from .readers.document_reader import DocumentReader
 
 # Import utilities
 try:
-    from ..utils.db_utils import close_database, db_pool, initialize_database
+    from ..utils.db_utils import close_database, initialize_database
     from ..utils.supabase_client import SupabaseRestClient
 except ImportError:
     # For direct execution or testing
@@ -27,7 +29,7 @@ except ImportError:
     import sys
 
     sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    from packages.utils.db_utils import close_database, db_pool, initialize_database
+    from packages.utils.db_utils import close_database, initialize_database
     from packages.utils.supabase_client import SupabaseRestClient
 
 # Load environment variables
@@ -77,8 +79,13 @@ class DocumentIngestionPipeline:
         self.chunker = create_chunker(self.chunker_config)
         self.embedder = create_embedder()
 
-        # Initialize REST client if using REST API
+        # Initialize delegated components (extracted modules)
+        self.reader = DocumentReader()
+        self.extractor = MetadataExtractor()
         self.rest_client = SupabaseRestClient() if use_rest_api else None
+        self.persistence = PostgresPersistence(
+            use_rest_api=use_rest_api, rest_client=self.rest_client
+        )
 
         self._initialized = False
 
@@ -125,9 +132,9 @@ class DocumentIngestionPipeline:
         if not self._initialized:
             await self.initialize()
 
-        # Clean existing data if requested
+        # Clean existing data if requested using delegated persistence
         if self.clean_before_ingest:
-            await self._clean_databases()
+            await self.persistence.clean_database()
 
         # Find all supported document files
         document_files = self._find_document_files()
@@ -184,13 +191,13 @@ class DocumentIngestionPipeline:
         """
         start_time = datetime.now()
 
-        # Read document (returns tuple: content, docling_doc)
-        document_content, docling_doc = self._read_document(file_path)
-        document_title = self._extract_title(document_content, file_path)
+        # Read document using delegated reader (returns tuple: content, docling_doc)
+        document_content, docling_doc = self.reader.read(file_path)
+        document_title = self.extractor.extract_title(document_content, file_path)
         document_source = os.path.relpath(file_path, self.documents_folder)
 
-        # Extract metadata from content
-        document_metadata = self._extract_document_metadata(document_content, file_path)
+        # Extract metadata using delegated extractor
+        document_metadata = self.extractor.extract_metadata(document_content, file_path)
 
         logger.info(f"Processing document: {document_title}")
 
@@ -219,9 +226,13 @@ class DocumentIngestionPipeline:
         embedded_chunks = await self.embedder.embed_chunks(chunks)
         logger.info(f"Generated embeddings for {len(embedded_chunks)} chunks")
 
-        # Save to PostgreSQL
-        document_id = await self._save_to_postgres(
-            document_title, document_source, document_content, embedded_chunks, document_metadata
+        # Save to PostgreSQL using delegated persistence
+        document_id = await self.persistence.save_document(
+            title=document_title,
+            source=document_source,
+            content=document_content,
+            chunks=embedded_chunks,
+            metadata=document_metadata,
         )
 
         logger.info(f"Saved document to PostgreSQL with ID: {document_id}")
@@ -272,247 +283,6 @@ class DocumentIngestionPipeline:
         files = [f for f in files if "/examples/" not in f and "/web/" not in f]
 
         return sorted(files)
-
-    def _read_document(self, file_path: str) -> tuple[str, Optional[Any]]:
-        """
-        Read document content from file - supports multiple formats via Docling.
-
-        Returns:
-            Tuple of (markdown_content, docling_document)
-            docling_document is None for text files and audio files
-        """
-        file_ext = os.path.splitext(file_path)[1].lower()
-
-        # Audio formats - transcribe with Whisper ASR
-        audio_formats = [".mp3", ".wav", ".m4a", ".flac"]
-        if file_ext in audio_formats:
-            content = self._transcribe_audio(file_path)
-            return (content, None)  # No DoclingDocument for audio
-
-        # Docling-supported formats (convert to markdown)
-        docling_formats = [
-            ".pdf",
-            ".docx",
-            ".doc",
-            ".pptx",
-            ".ppt",
-            ".xlsx",
-            ".xls",
-            ".html",
-            ".htm",
-        ]
-
-        if file_ext in docling_formats:
-            try:
-                from docling.document_converter import DocumentConverter
-
-                logger.info(
-                    f"Converting {file_ext} file using Docling: {os.path.basename(file_path)}"
-                )
-
-                converter = DocumentConverter()
-                result = converter.convert(file_path)
-
-                # Export to markdown for consistent processing
-                markdown_content = result.document.export_to_markdown()
-                logger.info(f"Successfully converted {os.path.basename(file_path)} to markdown")
-
-                # Return both markdown and DoclingDocument for HybridChunker
-                return (markdown_content, result.document)
-
-            except Exception as e:
-                logger.error(f"Failed to convert {file_path} with Docling: {e}")
-                # Fall back to raw text if Docling fails
-                logger.warning(f"Falling back to raw text extraction for {file_path}")
-                try:
-                    with open(file_path, "r", encoding="utf-8") as f:
-                        return (f.read(), None)
-                except (IOError, OSError, UnicodeDecodeError) as e:
-                    logger.error(f"Failed to read file {file_path}: {e}")
-                    raise RuntimeError(f"Could not read file {os.path.basename(file_path)}: {e}")
-
-        # Text-based formats (read directly)
-        else:
-            try:
-                with open(file_path, "r", encoding="utf-8") as f:
-                    return (f.read(), None)
-            except UnicodeDecodeError:
-                # Try with different encoding
-                with open(file_path, "r", encoding="latin-1") as f:
-                    return (f.read(), None)
-
-    def _transcribe_audio(self, file_path: str) -> str:
-        """Transcribe audio file using Whisper ASR via Docling."""
-        try:
-            from pathlib import Path
-
-            from docling.datamodel import asr_model_specs
-            from docling.datamodel.base_models import InputFormat
-            from docling.datamodel.pipeline_options import AsrPipelineOptions
-            from docling.document_converter import AudioFormatOption, DocumentConverter
-            from docling.pipeline.asr_pipeline import AsrPipeline
-
-            # Use Path object - Docling expects this
-            audio_path = Path(file_path).resolve()
-            logger.info(f"Transcribing audio file using Whisper Turbo: {audio_path.name}")
-            logger.info(f"Audio file absolute path: {audio_path}")
-
-            # Verify file exists
-            if not audio_path.exists():
-                raise FileNotFoundError(f"Audio file not found: {audio_path}")
-
-            # Configure ASR pipeline with Whisper Turbo model
-            pipeline_options = AsrPipelineOptions()
-            pipeline_options.asr_options = asr_model_specs.WHISPER_TURBO
-
-            converter = DocumentConverter(
-                format_options={
-                    InputFormat.AUDIO: AudioFormatOption(
-                        pipeline_cls=AsrPipeline,
-                        pipeline_options=pipeline_options,
-                    )
-                }
-            )
-
-            # Transcribe the audio file - pass Path object
-            result = converter.convert(audio_path)
-
-            # Export to markdown with timestamps
-            markdown_content = result.document.export_to_markdown()
-            logger.info(f"Successfully transcribed {os.path.basename(file_path)}")
-            return markdown_content
-
-        except Exception as e:
-            logger.error(f"Failed to transcribe {file_path} with Whisper ASR: {e}")
-            return f"[Error: Could not transcribe audio file {os.path.basename(file_path)}]"
-
-    def _extract_title(self, content: str, file_path: str) -> str:
-        """Extract title from document content or filename."""
-        # Try to find markdown title
-        lines = content.split("\n")
-        for line in lines[:10]:  # Check first 10 lines
-            line = line.strip()
-            if line.startswith("# "):
-                return line[2:].strip()
-
-        # Fallback to filename
-        return os.path.splitext(os.path.basename(file_path))[0]
-
-    def _extract_document_metadata(self, content: str, file_path: str) -> Dict[str, Any]:
-        """Extract metadata from document content."""
-        metadata = {
-            "file_path": file_path,
-            "file_size": len(content),
-            "ingestion_date": datetime.now().isoformat(),
-        }
-
-        # Try to extract YAML frontmatter
-        if content.startswith("---"):
-            try:
-                import yaml
-
-                end_marker = content.find("\n---\n", 4)
-                if end_marker != -1:
-                    frontmatter = content[4:end_marker]
-                    yaml_metadata = yaml.safe_load(frontmatter)
-                    if isinstance(yaml_metadata, dict):
-                        metadata.update(yaml_metadata)
-            except ImportError:
-                logger.warning("PyYAML not installed, skipping frontmatter extraction")
-            except Exception as e:
-                logger.warning(f"Failed to parse frontmatter: {e}")
-
-        # Extract some basic metadata from content
-        lines = content.split("\n")
-        metadata["line_count"] = len(lines)
-        metadata["word_count"] = len(content.split())
-
-        return metadata
-
-    async def _save_to_postgres(
-        self,
-        title: str,
-        source: str,
-        content: str,
-        chunks: List[DocumentChunk],
-        metadata: Dict[str, Any],
-    ) -> str:
-        """Save document and chunks to PostgreSQL or via REST API."""
-        if self.use_rest_api and self.rest_client:
-            # Use REST API
-            document_id = await self.rest_client.insert_document(
-                title=title, source=source, content=content, metadata=metadata
-            )
-
-            # Insert chunks via REST API
-            for i, chunk in enumerate(chunks):
-                if hasattr(chunk, "embedding") and chunk.embedding:
-                    await self.rest_client.insert_chunk(
-                        document_id=document_id,
-                        content=chunk.content,
-                        embedding=chunk.embedding,
-                        chunk_index=i,
-                        metadata=chunk.metadata or {},
-                        token_count=chunk.token_count,
-                    )
-
-            return document_id
-        else:
-            # Use direct PostgreSQL connection
-            async with db_pool.acquire() as conn:
-                async with conn.transaction():
-                    # Insert document
-                    document_result = await conn.fetchrow(
-                        """
-                        INSERT INTO documents (title, source, content, metadata)
-                        VALUES ($1, $2, $3, $4)
-                        RETURNING id::text
-                        """,
-                        title,
-                        source,
-                        content,
-                        json.dumps(metadata),
-                    )
-
-                    document_id = document_result["id"]
-
-                    # Insert chunks
-                    for chunk in chunks:
-                        # Convert embedding to PostgreSQL vector string format
-                        embedding_data = None
-                        if hasattr(chunk, "embedding") and chunk.embedding:
-                            # PostgreSQL vector format: '[1.0,2.0,3.0]' (no spaces after commas)
-                            embedding_data = "[" + ",".join(map(str, chunk.embedding)) + "]"
-
-                        await conn.execute(
-                            """
-                            INSERT INTO chunks (document_id, content, embedding, chunk_index, metadata, token_count)
-                            VALUES ($1::uuid, $2, $3::vector, $4, $5, $6)
-                            """,
-                            document_id,
-                            chunk.content,
-                            embedding_data,
-                            chunk.index,
-                            json.dumps(chunk.metadata),
-                            chunk.token_count,
-                        )
-
-                    return document_id
-
-    async def _clean_databases(self):
-        """Clean existing data from databases."""
-        logger.warning("Cleaning existing data from databases...")
-
-        # Clean PostgreSQL
-        if self.use_rest_api and self.rest_client:
-            await self.rest_client.delete_all_documents()
-            logger.info("Cleaned database via REST API")
-        else:
-            async with db_pool.acquire() as conn:
-                async with conn.transaction():
-                    await conn.execute("DELETE FROM chunks")
-                    await conn.execute("DELETE FROM documents")
-            logger.info("Cleaned PostgreSQL database")
 
 
 async def main():
