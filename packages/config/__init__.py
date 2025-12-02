@@ -175,10 +175,10 @@ class LLMConfig:
         """
         return f"{self.provider}:{self.model}"
 
-    def create_model(self) -> Union[str, "OpenAIChatModel"]:  # noqa: F821
+    def create_model(self) -> Union[str, "OpenAIModel"]:  # noqa: F821
         """Create PydanticAI model with proper provider configuration.
 
-        Returns OpenAIChatModel with custom provider if LLM_BASE_URL is set,
+        Returns OpenAIModel with custom provider if LLM_BASE_URL is set,
         otherwise returns model_identifier string for default OpenAI behavior.
 
         This method enables seamless support for:
@@ -187,18 +187,18 @@ class LLMConfig:
         - Any OpenAI-compatible API
 
         Returns:
-            Either a model identifier string or OpenAIChatModel instance.
+            Either a model identifier string or OpenAIModel instance.
         """
         # If custom base_url is set, use OpenAIProvider with that URL
         if self.base_url:
-            from pydantic_ai.models.openai import OpenAIChatModel
+            from pydantic_ai.models.openai import OpenAIModel
             from pydantic_ai.providers.openai import OpenAIProvider
 
             provider = OpenAIProvider(
                 base_url=self.base_url,
                 api_key=self.api_key or "api-key-not-set",
             )
-            return OpenAIChatModel(self.model, provider=provider)
+            return OpenAIModel(self.model, provider=provider)
 
         # Otherwise, return model identifier for default behavior
         return self.model_identifier
