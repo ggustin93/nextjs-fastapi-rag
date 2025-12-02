@@ -3,6 +3,7 @@
 import mimetypes
 from pathlib import Path
 
+import aiofiles
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 
@@ -56,10 +57,13 @@ async def get_document(file_path: str):
     Returns:
         The document file
     """
-    # Security: Sanitize input path first
-    clean_path = Path(file_path).as_posix()
-    if ".." in clean_path or clean_path.startswith("/"):
+    # Security: Basic input validation
+    # Note: Simple string check is insufficient (bypassable with URL encoding)
+    # Main security is enforced below with Path.resolve() + relative_to() check
+    if not file_path or file_path.startswith("/"):
         raise HTTPException(status_code=400, detail="Invalid path")
+
+    clean_path = Path(file_path).as_posix()
 
     # Strip common prefixes to ensure correct resolution relative to DATA_DIR
     # This prevents the ".../data/data/..." issue
@@ -103,9 +107,10 @@ async def get_document(file_path: str):
     elif mime_type is None:
         mime_type = "application/octet-stream"
 
-    # Read file and return with inline disposition for browser display
-    with open(full_path, "rb") as f:
-        content = f.read()
+    # Read file asynchronously to avoid blocking event loop
+    # Using aiofiles prevents FastAPI from freezing during file I/O
+    async with aiofiles.open(full_path, "rb") as f:
+        content = await f.read()
 
     return Response(
         content=content,

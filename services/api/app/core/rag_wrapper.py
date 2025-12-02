@@ -3,19 +3,15 @@
 import logging
 import re
 from collections import defaultdict
+from datetime import datetime, timedelta
 from typing import AsyncGenerator, Optional
-
-from pydantic_ai import Agent
 
 from packages.config import settings
 from packages.core.agent import (
-    RAGContext,
     create_rag_context,
     get_last_sources,
-    search_knowledge_base,
 )
-from packages.core.config import DomainConfig, QueryExpansionConfig
-from packages.core.weather_tool import get_weather
+from packages.core.factory import create_rag_agent
 
 logger = logging.getLogger(__name__)
 
@@ -42,8 +38,28 @@ def extract_cited_indices(response_text: str) -> set[int]:
 
 
 # Session-based message history storage
-# In production, use Redis or database
+# In-memory session storage with TTL cleanup (KISS approach)
+# For multi-server deployments, migrate to Redis or database
 _message_histories: dict = defaultdict(list)
+_session_timestamps: dict[str, datetime] = {}
+SESSION_TTL_HOURS = 1  # Clean up inactive sessions after 1 hour
+
+
+async def _cleanup_old_sessions():
+    """Remove sessions inactive for > TTL hours.
+
+    Prevents unbounded memory growth by automatically cleaning up
+    sessions that haven't been accessed within the TTL window.
+    Called on every session update for passive cleanup.
+    """
+    cutoff = datetime.now() - timedelta(hours=SESSION_TTL_HOURS)
+    expired = [sid for sid, ts in _session_timestamps.items() if ts < cutoff]
+
+    if expired:
+        logger.info(f"🧹 Cleaning up {len(expired)} expired sessions (TTL: {SESSION_TTL_HOURS}h)")
+        for sid in expired:
+            _message_histories.pop(sid, None)
+            _session_timestamps.pop(sid, None)
 
 
 def get_message_history(session_id: str) -> list:
@@ -51,9 +67,15 @@ def get_message_history(session_id: str) -> list:
     return _message_histories.get(session_id, [])
 
 
-def update_message_history(session_id: str, messages: list):
-    """Update message history for a session."""
+async def update_message_history(session_id: str, messages: list):
+    """Update message history and refresh session timestamp.
+
+    Also triggers cleanup of expired sessions on every update (passive cleanup).
+    This prevents unbounded memory growth in long-running deployments.
+    """
+    await _cleanup_old_sessions()  # Cleanup on every access (passive)
     _message_histories[session_id] = messages
+    _session_timestamps[session_id] = datetime.now()
 
 
 async def stream_agent_response(
@@ -73,23 +95,15 @@ async def stream_agent_response(
         dict: Event data with type and content
     """
     try:
-        # Create RAG context with all dependencies (db_client, reranker, domain_config)
-        # For domain-specific behavior, pass DomainConfig(query_expansion=QueryExpansionConfig())
-        # For generic RAG, pass None for domain_config
-        rag_context = await create_rag_context(
-            domain_config=DomainConfig(query_expansion=QueryExpansionConfig())
-        )
+        # Create RAG context with all dependencies (db_client, embedder)
+        rag_context = await create_rag_context()
 
         logger.info("RAG context initialized with dependency injection")
 
-        # Create agent with context - CRITICAL: Use settings.llm.model from .env
+        # Create agent using factory - Uses settings.llm.model from .env
         # Default LLM_MODEL=gpt-4.1-mini (NOT hardcoded "openai:gpt-4o")
-        rag_agent = Agent(
-            settings.llm.create_model(),  # Uses settings.llm.model from .env
-            deps_type=RAGContext,
-            system_prompt=settings.llm.system_prompt,
-            tools=[search_knowledge_base, get_weather],
-        )
+        # Tools are configurable via ENABLED_TOOLS environment variable (default: all tools)
+        rag_agent = create_rag_agent()
 
         logger.info(f"Agent created with model: {settings.llm.model}")
 
@@ -111,7 +125,7 @@ async def stream_agent_response(
 
             # Update message history with the new messages
             if session_id:
-                update_message_history(session_id, result.all_messages())
+                await update_message_history(session_id, result.all_messages())
 
             # Check message kinds to detect tool calling
             all_messages = result.all_messages()
