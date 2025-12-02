@@ -408,6 +408,17 @@ class Settings:
     api: APIConfig = field(default_factory=APIConfig)
     weather: WeatherToolConfig = field(default_factory=WeatherToolConfig)
 
+    # RAG agent tool configuration
+    # Environment Variable: ENABLED_TOOLS - JSON array of tool names (e.g., '["weather"]')
+    # None = all tools, [] = search only, ["weather"] = search + weather
+    enabled_tools: Optional[List[str]] = field(
+        default_factory=lambda: (
+            None
+            if not os.getenv("ENABLED_TOOLS")
+            else __import__("json").loads(os.getenv("ENABLED_TOOLS"))
+        )
+    )
+
 
 @lru_cache()
 def get_settings() -> Settings:

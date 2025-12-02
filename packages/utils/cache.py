@@ -115,7 +115,6 @@ def generate_cache_key(*args: Any, **kwargs: Any) -> str:
 
 # Global caches
 document_metadata_cache: AsyncLRUCache = AsyncLRUCache(max_size=500, ttl_seconds=300)
-embedding_cache: AsyncLRUCache = AsyncLRUCache(max_size=200, ttl_seconds=3600)
 query_result_cache: AsyncLRUCache = AsyncLRUCache(max_size=100, ttl_seconds=60)
 
 
@@ -123,7 +122,6 @@ def get_all_cache_stats() -> Dict[str, Dict[str, Any]]:
     """Get statistics for all caches."""
     return {
         "document_metadata": document_metadata_cache.stats.to_dict(),
-        "embedding": embedding_cache.stats.to_dict(),
         "query_result": query_result_cache.stats.to_dict(),
     }
 
@@ -131,6 +129,5 @@ def get_all_cache_stats() -> Dict[str, Dict[str, Any]]:
 def clear_all_caches() -> None:
     """Clear all caches."""
     document_metadata_cache.clear()
-    embedding_cache.clear()
     query_result_cache.clear()
     logger.info("All caches cleared")

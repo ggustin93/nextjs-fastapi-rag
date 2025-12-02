@@ -7,7 +7,6 @@ from .cache import (
     CacheStats,
     clear_all_caches,
     document_metadata_cache,
-    embedding_cache,
     generate_cache_key,
     get_all_cache_stats,
     query_result_cache,
@@ -22,6 +21,5 @@ __all__ = [
     "clear_all_caches",
     "generate_cache_key",
     "document_metadata_cache",
-    "embedding_cache",
     "query_result_cache",
 ]

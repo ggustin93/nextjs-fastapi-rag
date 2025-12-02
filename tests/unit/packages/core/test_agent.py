@@ -2,7 +2,7 @@
 
 import importlib
 import sys
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -19,62 +19,60 @@ class TestAgentHelpers:
     """Test agent helper functions."""
 
     def test_get_last_sources_returns_and_clears(self):
-        """get_last_sources should return sources and clear them."""
+        """get_last_sources should return sources and clear them from context."""
         agent_mod = get_agent_module()
 
-        # Set some test sources
-        agent_mod.last_search_sources = [
+        # Create mock context with sources
+        mock_context = MagicMock()
+        mock_context.last_search_sources = [
             {"title": "Doc1", "path": "path1", "similarity": 0.9},
             {"title": "Doc2", "path": "path2", "similarity": 0.8},
         ]
 
-        sources = agent_mod.get_last_sources()
+        sources = agent_mod.get_last_sources(mock_context)
 
         assert len(sources) == 2
         assert sources[0]["title"] == "Doc1"
         # Should be cleared after retrieval
-        assert agent_mod.last_search_sources == []
+        assert mock_context.last_search_sources == []
 
     def test_get_last_sources_empty(self):
         """get_last_sources with no sources returns empty list."""
         agent_mod = get_agent_module()
 
-        agent_mod.last_search_sources = []
-        sources = agent_mod.get_last_sources()
+        mock_context = MagicMock()
+        mock_context.last_search_sources = []
+
+        sources = agent_mod.get_last_sources(mock_context)
 
         assert sources == []
 
 
-class TestDatabaseInitialization:
-    """Test database connection management."""
+class TestRAGContextCreation:
+    """Test RAG context creation."""
 
     @pytest.mark.asyncio
-    async def test_initialize_db_creates_client(self):
-        """initialize_db should create REST client."""
+    async def test_create_rag_context_initializes_dependencies(self):
+        """create_rag_context should initialize db_client and embedder."""
         agent_mod = get_agent_module()
 
-        agent_mod.rest_client = None
+        with (
+            patch("packages.core.agent.SupabaseRestClient") as mock_db_class,
+            patch("packages.ingestion.embedder.create_embedder") as mock_embedder_factory,
+        ):
+            mock_db = AsyncMock()
+            mock_db_class.return_value = mock_db
+            mock_embedder = MagicMock()
+            mock_embedder_factory.return_value = mock_embedder
 
-        with patch("packages.core.agent.SupabaseRestClient") as mock_client:
-            mock_instance = AsyncMock()
-            mock_client.return_value = mock_instance
+            context = await agent_mod.create_rag_context()
 
-            await agent_mod.initialize_db()
-
-            mock_client.assert_called_once()
-            mock_instance.initialize.assert_awaited_once()
-
-    @pytest.mark.asyncio
-    async def test_close_db_closes_client(self):
-        """close_db should close REST client."""
-        agent_mod = get_agent_module()
-
-        mock_client = AsyncMock()
-        agent_mod.rest_client = mock_client
-
-        await agent_mod.close_db()
-
-        mock_client.close.assert_awaited_once()
+            mock_db_class.assert_called_once()
+            mock_db.initialize.assert_awaited_once()
+            mock_embedder_factory.assert_called_once()
+            assert context.db_client == mock_db
+            assert context.embedder == mock_embedder
+            assert context.last_search_sources == []
 
 
 class TestSystemPrompt:
