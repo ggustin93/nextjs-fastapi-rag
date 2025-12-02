@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { FileText, ChevronLeft, ChevronRight, ChevronDown, Loader2, ZoomIn, ZoomOut, Maximize2, Globe2, FileType, FileCode, Search, X } from 'lucide-react';
+import { FileText, ChevronLeft, ChevronRight, ChevronDown, Loader2, ZoomIn, ZoomOut, Maximize2, Globe2, FileType, FileCode, Search, X, ExternalLink } from 'lucide-react';
 import type { Source } from '@/types/chat';
 import { IframeViewer } from './IframeViewer';
 
@@ -42,6 +42,47 @@ const getDocumentUrl = (path: string) => {
     .normalize('NFC');
 
   return `${baseUrl}/documents/${cleanPath.split('/').map(encodeURIComponent).join('/')}`;
+};
+
+/**
+ * Format URL for compact display with intelligent truncation
+ * - Short URLs: Show full (e.g., "example.com/page")
+ * - Long URLs: Truncate middle (e.g., "example.com/.../page")
+ * - Max length: ~40 characters
+ */
+const formatCompactUrl = (url: string): string => {
+  try {
+    const urlObj = new URL(url);
+    const domain = urlObj.hostname.replace('www.', '');
+    const path = urlObj.pathname + urlObj.search;
+
+    // Remove trailing slash
+    const cleanPath = path.endsWith('/') ? path.slice(0, -1) : path;
+
+    // Full URL length check
+    const fullUrl = domain + cleanPath;
+
+    if (fullUrl.length <= 40) {
+      return fullUrl;
+    }
+
+    // Truncate middle of path if too long
+    const pathParts = cleanPath.split('/').filter(Boolean);
+    if (pathParts.length > 2) {
+      // Keep first and last segments, show "..." in middle
+      return `${domain}/${pathParts[0]}/.../${pathParts[pathParts.length - 1]}`;
+    }
+
+    // If path is single long segment, truncate it
+    if (cleanPath.length > 25) {
+      return `${domain}${cleanPath.substring(0, 22)}...`;
+    }
+
+    return fullUrl;
+  } catch {
+    // Fallback for invalid URLs
+    return url.substring(0, 40) + (url.length > 40 ? '...' : '');
+  }
 };
 
 interface DocumentViewerProps {
@@ -238,14 +279,37 @@ export function DocumentViewer({ source, index, onOpenDocument }: DocumentViewer
 
   // Button Trigger
   const TriggerButton = (
-    <Button variant="ghost" size="sm" className="h-auto py-0.5 px-1.5 text-[11px] hover:bg-muted" onClick={() => isDesktop && onOpenDocument?.(source)}>
-      {index && <span className="font-mono text-muted-foreground mr-1 text-[10px]">[{index}]</span>}
-      {getTypeIcon()}
-      <span className="truncate max-w-[200px]">{source.title}</span>
-      {source.page_range && (
-        <Badge variant="outline" className="ml-1 text-[9px] px-1 py-0">{source.page_range}</Badge>
+    <Button
+      variant="ghost"
+      size="sm"
+      className="h-auto py-1 px-1.5 text-[11px] hover:bg-muted flex-col items-start"
+      onClick={() => isDesktop && onOpenDocument?.(source)}
+    >
+      <div className="flex items-center w-full">
+        {index && <span className="font-mono text-muted-foreground mr-1 text-[10px]">[{index}]</span>}
+        {getTypeIcon()}
+        <span className="truncate max-w-[200px]">{source.title}</span>
+        {source.page_range && (
+          <Badge variant="outline" className="ml-1 text-[9px] px-1 py-0">{source.page_range}</Badge>
+        )}
+        <Badge variant="secondary" className="ml-1 text-[9px] px-1 py-0">{Math.round(source.similarity * 100)}%</Badge>
+      </div>
+
+      {/* Clickable URL subtitle for web sources */}
+      {source.url && (
+        <a
+          href={source.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()} // Prevent triggering parent button's document viewer
+          className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground ml-5 mt-0.5 underline decoration-dotted underline-offset-2 transition-colors"
+          aria-label={`Open ${source.url} in new tab`}
+          title={source.url}
+        >
+          <span>{formatCompactUrl(source.url)}</span>
+          <ExternalLink className="h-3 w-3" aria-hidden="true" />
+        </a>
       )}
-      <Badge variant="secondary" className="ml-1 text-[9px] px-1 py-0">{Math.round(source.similarity * 100)}%</Badge>
     </Button>
   );
 

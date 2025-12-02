@@ -13,6 +13,7 @@ export function useChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [currentTool, setCurrentTool] = useState<string | null>(null);
   const sessionIdRef = useRef<string>(generateSessionId());
 
   const sendMessage = useCallback(async (content: string) => {
@@ -95,6 +96,9 @@ export function useChat() {
             };
             assistantToolCalls.push(toolCall);
 
+            // Update current tool for the indicator
+            setCurrentTool(event.tool_name || null);
+
             // Update the assistant message with tool calls
             setMessages((prev) => {
               const lastMessage = prev[prev.length - 1];
@@ -115,6 +119,7 @@ export function useChat() {
       setError(err instanceof Error ? err.message : 'Failed to send message');
     } finally {
       setIsLoading(false);
+      setCurrentTool(null); // Clear current tool when done
     }
   }, [isLoading]);
 
@@ -129,6 +134,7 @@ export function useChat() {
     messages,
     isLoading,
     error,
+    currentTool,
     sendMessage,
     clearMessages,
   };

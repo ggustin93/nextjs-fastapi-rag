@@ -1,9 +1,10 @@
 import { createRequire } from "module";
 
 const require = createRequire(import.meta.url);
-const nextConfig = require("eslint-config-next");
+const tseslint = require("typescript-eslint");
+const nextPlugin = require("@next/eslint-plugin-next");
 
-export default [
+export default tseslint.config(
   {
     ignores: [
       ".next/**",
@@ -12,5 +13,24 @@ export default [
       "next-env.d.ts",
     ],
   },
-  ...nextConfig,
-];
+  {
+    files: ["**/*.{js,jsx,ts,tsx}"],
+    plugins: {
+      "@next/next": nextPlugin,
+    },
+    languageOptions: {
+      parser: tseslint.parser,
+      parserOptions: {
+        ecmaVersion: "latest",
+        sourceType: "module",
+        ecmaFeatures: {
+          jsx: true,
+        },
+      },
+    },
+    rules: {
+      ...nextPlugin.configs.recommended.rules,
+      ...nextPlugin.configs["core-web-vitals"].rules,
+    },
+  }
+);

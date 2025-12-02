@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Trash2, MessageSquare } from 'lucide-react';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
+import { ToolActivityIndicator } from './ToolActivityIndicator';
 import { useChat } from '@/hooks/useChat';
 import type { Source } from '@/types/chat';
 
@@ -14,7 +15,7 @@ interface ChatContainerProps {
 }
 
 export function ChatContainer({ onOpenDocument }: ChatContainerProps) {
-  const { messages, isLoading, error, sendMessage, clearMessages } = useChat();
+  const { messages, isLoading, error, currentTool, sendMessage, clearMessages } = useChat();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when new messages arrive
@@ -65,13 +66,8 @@ export function ChatContainer({ onOpenDocument }: ChatContainerProps) {
                 </div>
               ))}
               {isLoading && (
-                <div className="flex items-center gap-2 text-muted-foreground text-sm animate-in fade-in duration-200">
-                  <div className="flex gap-1">
-                    <span className="h-2 w-2 bg-current rounded-full animate-bounce [animation-delay:-0.3s]" />
-                    <span className="h-2 w-2 bg-current rounded-full animate-bounce [animation-delay:-0.15s]" />
-                    <span className="h-2 w-2 bg-current rounded-full animate-bounce" />
-                  </div>
-                  <span>Réflexion en cours...</span>
+                <div className="animate-in fade-in duration-300">
+                  <ToolActivityIndicator isActive={isLoading} currentTool={currentTool || undefined} />
                 </div>
               )}
               {/* Invisible element to scroll to */}

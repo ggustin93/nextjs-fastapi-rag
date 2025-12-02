@@ -5,7 +5,6 @@ import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import type { ChatMessage as ChatMessageType, Source } from '@/types/chat';
 import { SourcesList } from './DocumentViewer';
-import { ToolCallBadge } from './ToolCallBadge';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -183,10 +182,6 @@ export function ChatMessage({ message, onOpenDocument }: ChatMessageProps) {
 
         {!isUser && displaySources.length > 0 && (
           <SourcesList sources={displaySources} onOpenDocument={onOpenDocument} />
-        )}
-
-        {!isUser && (
-          <ToolCallBadge toolCalls={message.toolCalls} />
         )}
       </Card>
 
