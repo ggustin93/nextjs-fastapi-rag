@@ -1,10 +1,78 @@
+"""Tool registry for RAG agent.
+
+Core Tools (always available):
+- search_knowledge_base: Semantic search over knowledge base
+
+Optional Tools:
+- get_weather: Weather information via Open-Meteo API
+- external_api_example: Template for custom API integrations
 """
-Optional tools package for the RAG agent.
 
-This package contains OPTIONAL tool implementations that demonstrate patterns
-for extending the RAG system with external API integrations.
+from packages.core.tools.search_knowledge_base import search_knowledge_base
+from packages.core.tools.weather_tool import get_weather
 
-The core RAG system works perfectly without any of these tools.
-"""
+# Tool registry
+_AVAILABLE_TOOLS = {
+    "search_knowledge_base": search_knowledge_base,
+    "weather": get_weather,
+}
 
-__all__ = []  # Explicitly empty - all tools are optional and imported as needed
+
+def get_tools(enabled_tools: list[str] | None = None) -> list:
+    """Get list of tools for agent.
+
+    Args:
+        enabled_tools: List of tool names to enable.
+                      If None, returns all available tools.
+                      If empty list, returns only search_knowledge_base.
+
+    Returns:
+        List of tool functions
+
+    Examples:
+        >>> get_tools()  # All tools
+        [search_knowledge_base, get_weather]
+
+        >>> get_tools(["weather"])  # Only weather
+        [search_knowledge_base, get_weather]
+
+        >>> get_tools([])  # Only core search
+        [search_knowledge_base]
+    """
+    # search_knowledge_base is always included (core functionality)
+    tools = [search_knowledge_base]
+
+    if enabled_tools is None:
+        # Default: all tools
+        tools.extend([get_weather])
+    else:
+        # Only specified tools
+        for tool_name in enabled_tools:
+            if tool_name in _AVAILABLE_TOOLS:
+                tool = _AVAILABLE_TOOLS[tool_name]
+                if tool not in tools:  # Avoid duplicates
+                    tools.append(tool)
+
+    return tools
+
+
+def register_tool(name: str, tool_fn):
+    """Register a new tool.
+
+    Args:
+        name: Tool identifier
+        tool_fn: Async function with RunContext[RAGContext] signature
+
+    Example:
+        >>> from packages.core.tools import register_tool
+        >>> register_tool("my_api", fetch_my_api)
+    """
+    _AVAILABLE_TOOLS[name] = tool_fn
+
+
+__all__ = [
+    "search_knowledge_base",
+    "get_weather",
+    "get_tools",
+    "register_tool",
+]
