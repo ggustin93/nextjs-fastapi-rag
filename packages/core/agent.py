@@ -1,27 +1,19 @@
 """
-RAG CLI Agent with PostgreSQL/PGVector
-=======================================
-Text-based CLI agent that searches through knowledge base using semantic similarity.
+RAG Agent with PostgreSQL/PGVector
+====================================
+Core RAG agent that searches through knowledge base using semantic similarity.
 Uses hybrid search (vector + French FTS) with RRF ranking for optimal retrieval.
 
-Note: Reranking and query reformulation were removed after testing showed they
-hurt accuracy for French technical content. See docs/TROUBLESHOOT.md for details.
+For interactive CLI usage, use packages.core.cli module instead.
 """
 
-import asyncio
 import logging
-import os
-import re
-import sys
-from typing import Optional
 
 from dotenv import load_dotenv
-from pydantic_ai import Agent, RunContext
 
 from packages.config import settings
-from packages.core.config import DomainConfig, QueryExpansionConfig
-from packages.core.types import RAGContext, WeatherConfig
-from packages.core.weather_tool import get_weather
+from packages.core.factory import create_rag_agent
+from packages.core.types import RAGContext
 from packages.utils.supabase_client import SupabaseRestClient
 
 # Load environment variables
@@ -29,42 +21,19 @@ load_dotenv(".env")
 
 logger = logging.getLogger(__name__)
 
-# Global REST client
-rest_client = None
 
-# Global to track last search sources
-last_search_sources = []
-
-
-# ==============================================================================
-# RAGContext: Dependency Injection for Agent Runtime
-# ==============================================================================
-
-
-async def create_rag_context(domain_config: Optional[DomainConfig] = None) -> RAGContext:
+async def create_rag_context() -> RAGContext:
     """Create RAG context with core dependencies.
 
-    Factory function to initialize all agent runtime dependencies. All parameters
-    are optional - creates a generic RAG agent by default. For domain-specific
-    behavior, pass a DomainConfig with query expansion settings.
-
+    Factory function to initialize all agent runtime dependencies.
     Dependencies are initialized once and cached in the context to avoid
     repeated initialization overhead per search query.
-
-    Args:
-        domain_config: Optional domain-specific configuration for query expansion.
-                      If None, uses generic RAG behavior.
 
     Returns:
         Initialized RAGContext with all dependencies ready for agent use.
 
     Example:
-        # Generic RAG (no domain customization)
         context = await create_rag_context()
-
-        # Domain-specific RAG with query expansion
-        config = DomainConfig(query_expansion=QueryExpansionConfig())
-        context = await create_rag_context(domain_config=config)
     """
     # Initialize database client
     db_client = SupabaseRestClient()
@@ -77,466 +46,30 @@ async def create_rag_context(domain_config: Optional[DomainConfig] = None) -> RA
     embedder = create_embedder()
     logger.info("RAGContext: Embedder initialized")
 
-    # Create context with all dependencies
-    # Note: Reranking removed - hybrid search with RRF provides good ranking
-    # See TROUBLESHOOT.md for evidence that reranking hurt accuracy
     return RAGContext(
         db_client=db_client,
-        embedder=embedder,  # Cached for query embedding
-        domain_config=domain_config,  # Optional - None for generic RAG
-        weather_config=WeatherConfig(),  # Weather API config with defaults
+        embedder=embedder,
+        weather_config=settings.weather,
         last_search_sources=[],
     )
 
 
-# Initialize domain config with query expansion enabled (for backward compatibility)
-# Users can set this to DomainConfig() or None for generic RAG
-domain_config = DomainConfig(query_expansion=QueryExpansionConfig())
-
-
-def expand_query_for_fts(query: str, config: Optional[DomainConfig] = None) -> str:
-    """
-    Expand query with synonyms and related terms for better FTS matching.
-
-    This function is OPTIONAL - if config is None or query_expansion is None,
-    it returns the query unchanged. This makes query expansion completely optional
-    and allows the RAG system to work generically without domain-specific configuration.
-
-    When enabled with a DomainConfig, it can expand queries based on domain-specific
-    synonyms and criteria (e.g., for French FTS that drops single letters as stopwords).
+def get_last_sources(context: RAGContext) -> list:
+    """Get and clear the last search sources from context.
 
     Args:
-        query: The search query
-        config: Optional domain configuration. If None or config.query_expansion is None,
-                no expansion is performed (generic RAG behavior)
-
-    Returns:
-        Query with expansion terms added for FTS, or original query if no expansion configured
-    """
-    # No expansion if config is None or query_expansion is disabled
-    if config is None or config.query_expansion is None:
-        return query  # Generic RAG behavior - no domain-specific expansion
-
-    query_lower = query.lower()
-
-    # Build expansions map from config
-    expansions_map = {
-        "type d": config.query_expansion.type_d,
-        "type e": config.query_expansion.type_e,
-        "type a": config.query_expansion.type_a,
-    }
-
-    # Check if query mentions occupation types
-    expanded_terms = []
-
-    for type_key, expansions in expansions_map.items():
-        # Check various patterns: "type d", "type-d", "typed", "chantier de type d"
-        patterns = [
-            type_key,
-            type_key.replace(" ", "-"),
-            type_key.replace(" ", ""),
-            f"chantier de {type_key}",
-            f"occupation de {type_key}",
-            f"critères du {type_key}",
-            f"critères {type_key}",
-        ]
-
-        if any(pattern in query_lower for pattern in patterns):
-            # Add more expansion terms for better recall
-            expanded_terms.extend(expansions["synonyms"][:3])  # Increased from 2 to 3
-            expanded_terms.extend(expansions["criteria"][:3])  # Increased from 2 to 3
-            expanded_terms.extend(expansions["context"][:2])  # Add context terms
-            logger.debug(f"Query expansion triggered for '{type_key}': adding {expanded_terms}")
-            break  # Only expand for first matching type
-
-    if expanded_terms:
-        # Combine original query with expansion terms using OR logic
-        # FTS will match documents containing ANY of these terms
-        expansion_str = " OR ".join(expanded_terms[:8])  # Increased from 4 to 8 for better recall
-        expanded_query = f"{query} OR {expansion_str}"
-        logger.info(f"Query expanded: '{query}' → '{expanded_query}'")
-        return expanded_query
-
-    return query
-
-
-# TOC detection patterns for French documents
-TOC_PATTERNS = [
-    r"^\s*table\s*(des\s*)?mati[èe]res?\s*$",
-    r"^\s*sommaire\s*$",
-    r"^\s*contents?\s*$",
-    r"^[A-Z\s\.]+\s+\d+\s*$",  # "CHAPTER NAME    12"
-    r"^\d+\.\s+.{5,50}\s+\d+\s*$",  # "1.2 Section name   15"
-]
-
-
-def is_toc_chunk(content: str) -> bool:
-    """Detect if chunk is likely a Table of Contents entry.
-
-    TOC chunks typically contain:
-    - Short lines with page numbers at the end
-    - Section headers like "Table des matières", "Sommaire"
-    - Numbered section references with page numbers
-
-    Args:
-        content: The chunk content to analyze
-
-    Returns:
-        True if the chunk appears to be TOC content
-    """
-    if not content or len(content.strip()) < 10:
-        return False
-
-    lines = content.strip().split("\n")
-
-    # If most lines end with just a number (page reference), it's likely TOC
-    page_ref_lines = 0
-    for line in lines:
-        stripped = line.strip()
-        # Check for lines ending with just digits (page numbers)
-        if re.search(r"\s+\d+\s*$", stripped):
-            page_ref_lines += 1
-
-    # If more than 50% of lines have page references, it's TOC
-    if len(lines) > 0 and page_ref_lines / len(lines) > 0.5:
-        logger.debug(f"TOC detected: {page_ref_lines}/{len(lines)} lines have page refs")
-        return True
-
-    # Check explicit TOC patterns
-    for pattern in TOC_PATTERNS:
-        if re.search(pattern, content, re.IGNORECASE | re.MULTILINE):
-            logger.debug(f"TOC detected: matched pattern '{pattern}'")
-            return True
-
-    return False
-
-
-def get_last_sources(context: Optional[RAGContext] = None):
-    """Get and clear the last search sources.
-
-    Args:
-        context: Optional RAGContext. If provided, sources are retrieved from context.
-                 If None, falls back to global variable for backward compatibility.
+        context: RAGContext containing the search sources.
 
     Returns:
         List of source objects from the last search.
     """
-    if context:
-        # Use context-based sources (preferred)
-        sources = context.last_search_sources.copy()
-        context.last_search_sources = []
-        return sources
-    else:
-        # Fallback to global for backward compatibility
-        global last_search_sources
-        sources = last_search_sources.copy()
-        last_search_sources = []
-        return sources
+    sources = context.last_search_sources.copy()
+    context.last_search_sources = []
+    return sources
 
 
-async def initialize_db():
-    """Initialize Supabase REST client."""
-    global rest_client
-    if not rest_client:
-        rest_client = SupabaseRestClient()
-        await rest_client.initialize()
-        logger.info("Supabase REST client initialized")
-
-
-async def close_db():
-    """Close Supabase REST client."""
-    global rest_client
-    if rest_client:
-        await rest_client.close()
-        logger.info("Supabase REST client closed")
-
-
-async def search_knowledge_base(
-    ctx: RunContext[RAGContext], query: str, limit: int | None = None
-) -> str:
-    """
-    Search the knowledge base using semantic similarity.
-
-    Args:
-        query: The search query to find relevant information
-        limit: Maximum number of results to return (default from settings)
-
-    Returns:
-        Formatted search results with source citations and relevance scores
-    """
-    if limit is None:
-        limit = settings.search.default_limit
-
-    similarity_threshold = settings.search.similarity_threshold
-
-    # DEBUG: Log search initiation
-    logger.info(
-        "RAG search initiated",
-        extra={
-            "original_query": query,
-            "limit": limit,
-            "similarity_threshold": similarity_threshold,
-        },
-    )
-
-    try:
-        # Get RAG context from deps (dependency injection)
-        rag_ctx: RAGContext = ctx.deps
-
-        # Use original query directly - reformulation was found to lose intent
-        # See TROUBLESHOOT.md: "C'est quoi" → "chantier de type d" lost definition context
-        search_query = query
-
-        # Expand query for FTS (optional - uses domain_config from context if available)
-        # "type D" → "type D OR dispense OR 50 m² OR 24 heures"
-        fts_query = expand_query_for_fts(search_query, rag_ctx.domain_config)
-
-        # Generate embedding for query using cached embedder from context
-        # This avoids creating a new OpenAI client instance per query
-        query_embedding = await rag_ctx.embedder.embed_query(search_query)
-
-        # Use hybrid search (vector + keyword) for better recall
-        # FTS uses expanded query; vector uses original for semantic matching
-        # Falls back to vector-only search if hybrid fails
-        results = await rag_ctx.db_client.hybrid_search(
-            query_text=fts_query,  # Expanded query for FTS
-            query_embedding=query_embedding,
-            limit=limit,
-            similarity_threshold=similarity_threshold,
-            exclude_toc=settings.search.exclude_toc,
-            rrf_k=settings.search.rrf_k,
-        )
-
-        # DEBUG: Log retrieval results
-        logger.info(
-            "RAG chunks retrieved",
-            extra={
-                "chunks_found": len(results),
-                "avg_similarity": (
-                    sum(r.get("similarity", 0) for r in results) / len(results) if results else 0
-                ),
-                "max_similarity": max((r.get("similarity", 0) for r in results), default=0),
-                "min_similarity": min((r.get("similarity", 0) for r in results), default=0),
-            },
-        )
-
-        # Format results for response
-        if not results:
-            logger.warning("No chunks found matching similarity threshold")
-            return "⚠️ HORS PÉRIMÈTRE: Aucune information pertinente trouvée dans la base de connaissances pour cette requête. Cette question semble être en dehors du périmètre de la documentation disponible."
-
-        # Results from DB are already sorted by RRF score (hybrid) or similarity (vector)
-        # TOC chunks are filtered at database level via exclude_toc=True (default)
-        # Note: Reranking removed - FlashRank gave 0.0 scores to definition chunks
-        # See TROUBLESHOOT.md for evidence that RRF-sorted results work better
-        logger.info(f"Retrieved {len(results)} chunks from knowledge base")
-
-        # Check if results are actually relevant using max similarity
-        # Low max similarity suggests the query is likely out of scope
-        max_similarity = max((r.get("similarity", 0) for r in results), default=0)
-
-        # If best result is below threshold, this is likely an out-of-scope question
-        # Configurable via OUT_OF_SCOPE_THRESHOLD env var (default: 0.40)
-        if max_similarity < settings.search.out_of_scope_threshold:
-            logger.warning(
-                f"Low relevance results - likely out of scope query. Max similarity: {max_similarity:.2f}"
-            )
-            return f"⚠️ PERTINENCE FAIBLE: Les résultats trouvés ont une pertinence maximale de {int(max_similarity * 100)}%, ce qui suggère que cette question est probablement HORS DU PÉRIMÈTRE de la base de connaissances. Les documents trouvés ne semblent pas répondre directement à cette question."
-
-        # DEBUG: Log chunk details
-        for idx, row in enumerate(results[:3]):  # Log first 3 chunks
-            logger.debug(
-                f"Chunk {idx + 1} details",
-                extra={
-                    "similarity": row.get("similarity"),
-                    "content_length": len(row.get("content", "")),
-                    "document": row.get("document_title"),
-                    "content_preview": row.get("content", "")[:100] + "...",
-                },
-            )
-
-        # Build response with sources and track them in context
-        response_parts = []
-        sources_tracked = []
-
-        for index, row in enumerate(results):
-            similarity = row["similarity"]
-            content = row["content"]
-            doc_title = row["document_title"]
-            doc_source = row["document_source"]
-
-            # Extract metadata from row if available (for scraped web content)
-            doc_metadata = row.get("document_metadata", {})
-            original_url = doc_metadata.get("url") if isinstance(doc_metadata, dict) else None
-
-            # Extract page information from chunk metadata (for PDFs)
-            chunk_metadata = row.get("metadata", {})
-            page_start = (
-                chunk_metadata.get("page_start") if isinstance(chunk_metadata, dict) else None
-            )
-            page_end = chunk_metadata.get("page_end") if isinstance(chunk_metadata, dict) else None
-
-            # Build source object
-            source_obj = {"title": doc_title, "path": doc_source, "similarity": similarity}
-
-            # Add page number info for PDFs
-            if page_start is not None:
-                source_obj["page_number"] = page_start
-                if page_end is not None and page_end != page_start:
-                    source_obj["page_range"] = f"p. {page_start}-{page_end}"
-                else:
-                    source_obj["page_range"] = f"p. {page_start}"
-
-            # Add URL if available (for scraped web content)
-            if original_url:
-                source_obj["url"] = original_url
-                # Optionally include full metadata for future use
-                source_obj["metadata"] = doc_metadata
-
-            # Track source for frontend
-            sources_tracked.append(source_obj)
-
-            # Use numbered reference [1], [2], etc. with source metadata
-            source_ref = f"[{index + 1}]"
-            similarity_pct = int(similarity * 100)
-
-            # Add similarity warning for low-confidence chunks
-            confidence_marker = ""
-            if similarity < 0.6:
-                confidence_marker = " - FAIBLE"
-
-            # Format with document title and similarity score
-            response_parts.append(
-                f'{source_ref} Source: "{doc_title}" (Pertinence: {similarity_pct}%{confidence_marker})\n{content}\n'
-            )
-
-        # Store sources in context for retrieval
-        rag_ctx.last_search_sources = sources_tracked
-
-        if not response_parts:
-            logger.warning("Chunks found but response_parts is empty")
-            return "Des résultats ont été trouvés mais ils ne semblent pas directement pertinents. Essayez de reformuler votre question."
-
-        # DEBUG: Log final formatted response
-        formatted_response = (
-            f"Trouvé {len(response_parts)} résultats pertinents (triés par pertinence):\n\n"
-            + "\n---\n".join(response_parts)
-        )
-        logger.info(
-            "RAG tool return value",
-            extra={
-                "response_length": len(formatted_response),
-                "num_sources": len(response_parts),
-                "response_preview": formatted_response[:2000]
-                + "...",  # Increased to 2000 chars for debugging
-            },
-        )
-        # Log full response for debugging
-        logger.info(f"FULL RAG RESPONSE:\n{formatted_response}")
-
-        return formatted_response
-
-    except Exception as e:
-        logger.error(f"Knowledge base search failed: {e}", exc_info=True)
-        return f"I encountered an error searching the knowledge base: {str(e)}"
-
-
-# Create the PydanticAI agent with RAG tool
+# Create the PydanticAI agent using factory for consistent configuration
 # Uses settings.llm.create_model() to support OpenAI, Chutes.ai, Ollama, or any OpenAI-compatible API
-# System prompt is now configurable via RAG_SYSTEM_PROMPT environment variable (see packages/config)
-agent = Agent(
-    settings.llm.create_model(),
-    system_prompt=settings.llm.system_prompt,
-    tools=[search_knowledge_base, get_weather],
-)
-
-
-async def run_cli():
-    """Run the agent in an interactive CLI with streaming."""
-
-    # Initialize database
-    await initialize_db()
-
-    print("=" * 60)
-    print("RAG Knowledge Assistant")
-    print("=" * 60)
-    print("Ask me anything about the knowledge base!")
-    print("Type 'quit', 'exit', or press Ctrl+C to exit.")
-    print("=" * 60)
-    print()
-
-    message_history = []
-
-    try:
-        while True:
-            # Get user input
-            try:
-                user_input = input("You: ").strip()
-            except EOFError:
-                break
-
-            if not user_input:
-                continue
-
-            # Check for exit commands
-            if user_input.lower() in ["quit", "exit", "bye"]:
-                print("\nAssistant: Thank you for using the knowledge assistant. Goodbye!")
-                break
-
-            print("Assistant: ", end="", flush=True)
-
-            try:
-                # Stream the response using run_stream
-                async with agent.run_stream(user_input, message_history=message_history) as result:
-                    # Stream text as it comes in (delta=True for only new tokens)
-                    async for text in result.stream_text(delta=True):
-                        # Print only the new token
-                        print(text, end="", flush=True)
-
-                    print()  # New line after streaming completes
-
-                    # Update message history for context
-                    message_history = result.all_messages()
-
-            except KeyboardInterrupt:
-                print("\n\n[Interrupted]")
-                break
-            except Exception as e:
-                print(f"\n\nError: {e}")
-                logger.error(f"Agent error: {e}", exc_info=True)
-
-            print()  # Extra line for readability
-
-    except KeyboardInterrupt:
-        print("\n\nGoodbye!")
-    finally:
-        await close_db()
-
-
-async def main():
-    """Main entry point."""
-    # Configure logging
-    logging.basicConfig(
-        level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
-
-    # Check required environment variables
-    if not os.getenv("SUPABASE_URL"):
-        logger.error("SUPABASE_URL environment variable is required")
-        sys.exit(1)
-
-    # API key is required unless using a custom base_url (like Ollama)
-    if not settings.llm.api_key and not settings.llm.base_url:
-        logger.error("LLM_API_KEY or OPENAI_API_KEY environment variable is required")
-        logger.error("(or set LLM_BASE_URL for local models like Ollama)")
-        sys.exit(1)
-
-    # Run the CLI
-    await run_cli()
-
-
-if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        print("\n\nShutting down...")
+# System prompt is configurable via RAG_SYSTEM_PROMPT environment variable (see packages/config)
+# Tools are configurable via ENABLED_TOOLS environment variable
+agent = create_rag_agent()

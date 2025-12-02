@@ -15,10 +15,13 @@ from typing import Any, Dict, List
 
 import asyncpg
 from dotenv import load_dotenv
-from pydantic_ai import Agent, RunContext
+from pydantic_ai import Agent
 
 from packages.__version__ import __version__
 from packages.config import settings
+from packages.core.agent import create_rag_context
+from packages.core.factory import create_rag_agent
+from packages.core.tools import get_tools
 
 # Load environment variables
 load_dotenv(".env")
@@ -65,65 +68,6 @@ async def close_db():
         logger.debug("Database connection pool closed")
 
 
-async def search_knowledge_base(ctx: RunContext[None], query: str, limit: int | None = None) -> str:
-    """
-    Search the knowledge base using semantic similarity.
-
-    Args:
-        query: The search query to find relevant information
-        limit: Maximum number of results to return (default from settings)
-
-    Returns:
-        Formatted search results with source citations
-    """
-    if limit is None:
-        limit = settings.search.default_limit
-    try:
-        # Ensure database is initialized
-        if not db_pool:
-            await initialize_db()
-
-        # Generate embedding for query
-        from packages.ingestion.embedder import create_embedder
-
-        embedder = create_embedder()
-        query_embedding = await embedder.embed_query(query)
-
-        # Convert to PostgreSQL vector format
-        embedding_str = "[" + ",".join(map(str, query_embedding)) + "]"
-
-        # Search using match_chunks function
-        async with db_pool.acquire() as conn:
-            results = await conn.fetch(
-                """
-                SELECT * FROM match_chunks($1::vector, $2)
-                """,
-                embedding_str,
-                limit,
-            )
-
-        # Format results for response
-        if not results:
-            return "No relevant information found in the knowledge base for your query."
-
-        # Build response with sources
-        response_parts = []
-        for row in results:
-            content = row["content"]
-            doc_title = row["document_title"]
-
-            response_parts.append(f"[Source: {doc_title}]\n{content}\n")
-
-        if not response_parts:
-            return "Found some results but they may not be directly relevant to your query. Please try rephrasing your question."
-
-        return f"Found {len(response_parts)} relevant results:\n\n" + "\n---\n".join(response_parts)
-
-    except Exception as e:
-        logger.error(f"Knowledge base search failed: {e}", exc_info=True)
-        return f"I encountered an error searching the knowledge base: {str(e)}"
-
-
 # System prompt for the RAG agent (kept as code - defines core agent behavior)
 RAG_SYSTEM_PROMPT = """You are an intelligent knowledge assistant with access to an organization's documentation and information.
 Your role is to help users find accurate information from the knowledge base.
@@ -135,12 +79,11 @@ Be concise but thorough in your responses.
 Ask clarifying questions if the user's query is ambiguous.
 When you find relevant information, synthesize it clearly and cite the source documents."""
 
-# Create the PydanticAI agent with the RAG tool
+# Create the PydanticAI agent using factory (search only, no weather for CLI)
 # Uses settings.llm.create_model() to support OpenAI, Chutes.ai, Ollama, or any OpenAI-compatible API
-agent = Agent(
-    settings.llm.create_model(),
+agent = create_rag_agent(
     system_prompt=RAG_SYSTEM_PROMPT,
-    tools=[search_knowledge_base],
+    enabled_tools=[],  # Search only, no weather
 )
 
 
@@ -272,8 +215,13 @@ class RAGAgentCLI:
         try:
             print(f"\n{Colors.BOLD}🤖 Assistant:{Colors.END} ", end="", flush=True)
 
+            # Create RAG context with dependencies
+            rag_context = await create_rag_context()
+
             # Stream the response using run_stream
-            async with agent.run_stream(message, message_history=self.message_history) as result:
+            async with agent.run_stream(
+                message, message_history=self.message_history, deps=rag_context
+            ) as result:
                 # Stream text as it comes in (delta=True for only new tokens)
                 async for text in result.stream_text(delta=True):
                     # Print only the new token
@@ -396,7 +344,7 @@ def main():
         agent = Agent(
             f"openai:{args.model}",
             system_prompt=RAG_SYSTEM_PROMPT,
-            tools=[search_knowledge_base],
+            tools=get_tools([]),  # Search only for CLI
         )
         logger.info(f"Using model override: {args.model}")
 

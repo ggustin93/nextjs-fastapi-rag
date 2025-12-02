@@ -1,9 +1,7 @@
-"""Domain-specific configuration module.
+"""Core configuration module.
 
-This package contains OPTIONAL configuration classes for domain-specific
-RAG customization. The core RAG system works without any configuration.
+This package contains configuration utilities for the RAG core.
+Domain-specific configuration has been removed for simplification.
 """
 
-from .domain_config import DomainConfig, QueryExpansionConfig
-
-__all__ = ["DomainConfig", "QueryExpansionConfig"]
+__all__: list[str] = []
