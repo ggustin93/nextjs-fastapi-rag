@@ -35,6 +35,8 @@ CREATE TABLE chunks (
 CREATE INDEX idx_chunks_embedding ON chunks USING ivfflat (embedding vector_cosine_ops) WITH (lists = 1);
 CREATE INDEX idx_chunks_document_id ON chunks (document_id);
 CREATE INDEX idx_chunks_chunk_index ON chunks (document_id, chunk_index);
+-- GIN index for French Full-Text Search performance
+CREATE INDEX idx_chunks_content_fts ON chunks USING GIN (to_tsvector('french', content));
 
 -- Fixed match_chunks with similarity_threshold support
 CREATE OR REPLACE FUNCTION match_chunks(
