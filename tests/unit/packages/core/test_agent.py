@@ -78,25 +78,31 @@ class TestRAGContextCreation:
 class TestSystemPrompt:
     """Test system prompt configuration."""
 
-    def _get_system_prompt(self, agent_mod):
+    def _get_system_prompt(self, agent):
         """Helper to get system prompt string from PydanticAI agent."""
         # PydanticAI stores system prompts in _system_prompts tuple
-        prompts = agent_mod.agent._system_prompts
+        prompts = agent._system_prompts
         return " ".join(prompts) if prompts else ""
+
+    def _create_test_agent(self):
+        """Create agent for testing using the factory."""
+        from packages.core.factory import create_rag_agent
+
+        return create_rag_agent()
 
     def test_agent_has_system_prompt(self):
         """Agent should have a system prompt configured."""
-        agent_mod = get_agent_module()
+        agent = self._create_test_agent()
 
-        assert agent_mod.agent is not None
-        prompt = self._get_system_prompt(agent_mod)
+        assert agent is not None
+        prompt = self._get_system_prompt(agent)
         assert len(prompt) > 100
 
     def test_system_prompt_instructs_knowledge_base_search(self):
         """System prompt should instruct agent to search knowledge base."""
-        agent_mod = get_agent_module()
+        agent = self._create_test_agent()
 
-        prompt_lower = self._get_system_prompt(agent_mod).lower()
+        prompt_lower = self._get_system_prompt(agent).lower()
         # Should instruct to search knowledge base before answering (French)
         assert "base de connaissances" in prompt_lower or "base de données" in prompt_lower
         # Check for search instruction - prompt mentions search_knowledge_base tool
@@ -104,9 +110,9 @@ class TestSystemPrompt:
 
     def test_system_prompt_handles_missing_info(self):
         """System prompt should handle missing information gracefully."""
-        agent_mod = get_agent_module()
+        agent = self._create_test_agent()
 
-        prompt_lower = self._get_system_prompt(agent_mod).lower()
+        prompt_lower = self._get_system_prompt(agent).lower()
         # Should handle case when info isn't found (French)
         # Prompt discusses "aucune information pertinente" scenario
         assert "aucune information" in prompt_lower or "pas trouvé" in prompt_lower
