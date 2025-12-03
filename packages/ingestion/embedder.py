@@ -63,11 +63,11 @@ class EmbeddingGenerator:
             "text-embedding-ada-002": {"dimensions": 1536, "max_tokens": 8191},
         }
 
-        if model not in self.model_configs:
-            logger.warning(f"Unknown model {model}, using default config")
+        if self.model not in self.model_configs:
+            logger.warning(f"Unknown model {self.model}, using default config")
             self.config = {"dimensions": 1536, "max_tokens": 8191}
         else:
-            self.config = self.model_configs[model]
+            self.config = self.model_configs[self.model]
 
     @property
     def client(self):
