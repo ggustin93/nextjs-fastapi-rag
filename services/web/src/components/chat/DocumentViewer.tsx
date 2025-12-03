@@ -1,89 +1,51 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
-import ReactMarkdown from 'react-markdown';
+import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { FileText, ChevronLeft, ChevronRight, ChevronDown, Loader2, ZoomIn, ZoomOut, Maximize2, Globe2, FileType, FileCode, Search, X, ExternalLink } from 'lucide-react';
+import {
+  FileText, ChevronDown, ChevronRight,
+  Loader2,
+  Globe2, FileType, FileCode, ExternalLink
+} from 'lucide-react';
 import type { Source } from '@/types/chat';
 import { IframeViewer } from './IframeViewer';
+import { useDocumentFetch } from './hooks/useDocumentFetch';
+import { formatCompactUrl } from './utils/formatUrl';
+import type { PdfViewerProps } from './PdfViewer';
 
-// Styles
-import 'react-pdf/dist/Page/TextLayer.css';
-import 'react-pdf/dist/Page/AnnotationLayer.css';
-
-// Configure PDF.js worker on the client only (avoid server-side evaluation that
-// tries to access browser globals like `DOMMatrix` inside pdfjs-dist).
-// We set this up in a useEffect below so the module isn't imported at module
-// evaluation time on the server.
-
-// Lazy load PDF components with proper options
-const Document = dynamic(
-  () => import('react-pdf').then((mod) => mod.Document),
-  { ssr: false, loading: () => <div className="flex gap-2 p-4"><Loader2 className="animate-spin" /> Loading PDF...</div> }
-);
-const Page = dynamic(
-  () => import('react-pdf').then((mod) => mod.Page),
-  { ssr: false }
+const PdfViewer = dynamic<PdfViewerProps>(
+  () => import('./PdfViewer').then((mod) => mod.PdfViewer),
+  { ssr: false, loading: () => <LoadingSpinner message="Loading PDF viewer..." /> }
 );
 
-// Helper to clean API URLs
-const getDocumentUrl = (path: string) => {
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
-  // Strip prefixes to ensure clean relative path
-  const cleanPath = path
-    .replace(/^documents\//, '')
-    .replace(/^data\//, '')
-    .normalize('NFC');
+// --- Shared Components ---
 
-  return `${baseUrl}/documents/${cleanPath.split('/').map(encodeURIComponent).join('/')}`;
-};
+function LoadingSpinner({ message }: { message: string }) {
+  return (
+    <div className="flex items-center gap-2 text-muted-foreground p-8">
+      <Loader2 className="h-5 w-5 animate-spin" />
+      {message}
+    </div>
+  );
+}
 
-/**
- * Format URL for compact display with intelligent truncation
- * - Short URLs: Show full (e.g., "example.com/page")
- * - Long URLs: Truncate middle (e.g., "example.com/.../page")
- * - Max length: ~40 characters
- */
-const formatCompactUrl = (url: string): string => {
-  try {
-    const urlObj = new URL(url);
-    const domain = urlObj.hostname.replace('www.', '');
-    const path = urlObj.pathname + urlObj.search;
+function ErrorDisplay({ message }: { message: string }) {
+  return <div className="p-8 text-destructive text-center">{message}</div>;
+}
 
-    // Remove trailing slash
-    const cleanPath = path.endsWith('/') ? path.slice(0, -1) : path;
+function SourceTypeIcon({ source }: { source: Source }) {
+  if (source.url) return <Globe2 className="h-3 w-3 mr-1 text-blue-500" />;
+  if (source.path.toLowerCase().endsWith('.pdf')) return <FileType className="h-3 w-3 mr-1 text-red-500" />;
+  return <FileCode className="h-3 w-3 mr-1 text-green-500" />;
+}
 
-    // Full URL length check
-    const fullUrl = domain + cleanPath;
-
-    if (fullUrl.length <= 40) {
-      return fullUrl;
-    }
-
-    // Truncate middle of path if too long
-    const pathParts = cleanPath.split('/').filter(Boolean);
-    if (pathParts.length > 2) {
-      // Keep first and last segments, show "..." in middle
-      return `${domain}/${pathParts[0]}/.../${pathParts[pathParts.length - 1]}`;
-    }
-
-    // If path is single long segment, truncate it
-    if (cleanPath.length > 25) {
-      return `${domain}${cleanPath.substring(0, 22)}...`;
-    }
-
-    return fullUrl;
-  } catch {
-    // Fallback for invalid URLs
-    return url.substring(0, 40) + (url.length > 40 ? '...' : '');
-  }
-};
+// --- Main Component ---
 
 interface DocumentViewerProps {
   source: Source;
@@ -95,189 +57,64 @@ export function DocumentViewer({ source, index, onOpenDocument }: DocumentViewer
   const isDesktop = useMediaQuery('(min-width: 768px)');
   const [isOpen, setIsOpen] = useState(false);
 
-  // Viewer State
-  const [numPages, setNumPages] = useState<number>(0);
-  const [pageNumber, setPageNumber] = useState<number>(source.page_number || 1);
-  const [scale, setScale] = useState<number>(1.0);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
-
-  // Data State
-  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
-  const [mdContent, setMdContent] = useState<string | null>(null);
-
-  // Search State
-  const [searchTerm, setSearchTerm] = useState<string>('');
+  // Viewer state
+  const [numPages, setNumPages] = useState(0);
+  const [pageNumber, setPageNumber] = useState(source.page_number || 1);
 
   const isPdf = source.path.toLowerCase().endsWith('.pdf');
+  const isWebSource = Boolean(source.url);
 
-  // Escape regex special characters
-  const escapeRegex = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-  // Custom text renderer for search highlighting
-  const customTextRenderer = useCallback(({ str }: { str: string }) => {
-    if (!searchTerm) return str;
-
-    const regex = new RegExp(`(${escapeRegex(searchTerm)})`, 'gi');
-    const parts = str.split(regex);
-
-    return parts
-      .map((part) =>
-        regex.test(part)
-          ? `<mark style="background-color: #fef08a; padding: 2px;">${part}</mark>`
-          : part
-      )
-      .join('');
-  }, [searchTerm]);
-
-  // Fetch Data
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const controller = new AbortController();
-    setIsLoading(true);
-    setError(null);
-    setMdContent(null);
-
-    let currentBlobUrl: string | null = null;
-
-    const fetchData = async () => {
-      try {
-        const url = getDocumentUrl(source.path);
-        const res = await fetch(url, { signal: controller.signal });
-
-        if (!res.ok) throw new Error(`Status ${res.status}`);
-
-        if (isPdf) {
-          const blob = await res.blob();
-          if (blob.size === 0) throw new Error("Empty file");
-          currentBlobUrl = URL.createObjectURL(blob);
-          setPdfUrl(currentBlobUrl);
-          // Note: isLoading stays true for PDF until React-PDF renders (onLoadSuccess)
-        } else {
-          const text = await res.text();
-          setMdContent(text);
-          setIsLoading(false);
-        }
-      } catch (err: unknown) {
-        const error = err as Error;
-        if (error.name !== 'AbortError') {
-          setError(error.message || 'Error loading document');
-          setIsLoading(false);
-        }
-      }
-    };
-
-    fetchData();
-
-    return () => {
-      controller.abort();
-      // Cleanup blob URL to prevent memory leaks
-      if (currentBlobUrl) {
-        URL.revokeObjectURL(currentBlobUrl);
-      }
-    };
-  }, [isOpen, source.path, isPdf]);
-
-  // Initialize PDF.js worker on the client when the viewer opens for a PDF.
-  useEffect(() => {
-    if (isPdf && isOpen) {
-      import('react-pdf')
-        .then((pdf) => {
-          pdf.pdfjs.GlobalWorkerOptions.workerSrc =
-            `https://unpkg.com/pdfjs-dist@${pdf.pdfjs.version}/build/pdf.worker.mjs`;
-        })
-        .catch((err) => {
-          // Don't crash - just log worker init failures
-          // (keeps server-side rendering safe if import somehow happens)
-
-          console.warn('Failed to initialize pdfjs worker', err);
-        });
-    }
-  }, [isPdf, isOpen]);
+  // Fetch document content
+  const { pdfUrl, mdContent, isLoading, error } = useDocumentFetch({
+    path: source.path,
+    isPdf,
+    enabled: isOpen,
+  });
 
   // Auto-scroll to source page when modal opens
   useEffect(() => {
-    if (isOpen && source.page_number) {
-      setPageNumber(source.page_number);
-    }
+    if (isOpen && source.page_number) setPageNumber(source.page_number);
   }, [isOpen, source.page_number]);
 
-  // Handlers
-  const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
-    setNumPages(numPages);
-    setIsLoading(false); // PDF is ready visually
-  };
+  // --- Render Helpers ---
 
   const renderContent = () => {
-    const isWebSource = Boolean(source.url);
+    if (error) return <ErrorDisplay message={error} />;
+    if (isLoading) return <LoadingSpinner message="Retrieving document..." />;
 
-    if (error) return <div className="p-8 text-destructive text-center">{error}</div>;
-
-    if (isLoading && !pdfUrl && !mdContent) {
-      return (
-        <div className="flex items-center gap-2 text-muted-foreground p-10">
-          <Loader2 className="h-5 w-5 animate-spin" /> Retrieving document...
-        </div>
-      );
-    }
-
-    // Web source with iframe support
+    // Web source with iframe
     if (isWebSource && source.url && mdContent) {
-      return (
-        <IframeViewer
-          url={source.url}
-          markdownContent={mdContent}
-          title={source.title}
-        />
-      );
+      return <IframeViewer url={source.url} markdownContent={mdContent} title={source.title} />;
     }
 
-    // Regular markdown (non-web sources)
+    // Regular markdown
     if (!isPdf && !isWebSource && mdContent) {
       return (
         <article className="prose prose-sm dark:prose-invert max-w-none p-6">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{mdContent}</ReactMarkdown>
+          <Markdown remarkPlugins={[remarkGfm]}>{mdContent}</Markdown>
         </article>
       );
     }
 
-    // PDF rendering with search support
+    // PDF
     if (isPdf && pdfUrl) {
       return (
-        <div className="flex justify-center bg-muted/30 p-4">
-          <Document
+        <div className="flex justify-center bg-muted/30 p-4 h-full">
+          <PdfViewer
             file={pdfUrl}
-            onLoadSuccess={onDocumentLoadSuccess}
-            onLoadError={(err) => setError(err.message)}
-            loading={<div className="flex gap-2 p-4"><Loader2 className="animate-spin" /> Rendering PDF...</div>}
-          >
-            <Page
-              pageNumber={pageNumber}
-              scale={scale}
-              renderTextLayer={true}
-              customTextRenderer={customTextRenderer}
-              renderAnnotationLayer={false}
-            />
-          </Document>
+            pageNumber={pageNumber}
+            onLoadSuccess={({ numPages }) => setNumPages(numPages)}
+            onLoadError={(err) => console.error('PDF load error:', err)}
+          />
         </div>
       );
     }
+
     return null;
   };
 
-  // Helper function to get single type-specific icon
-  const getTypeIcon = () => {
-    if (source.url) {
-      return <Globe2 className="h-3 w-3 mr-1 text-blue-500" />;
-    }
-    if (isPdf) {
-      return <FileType className="h-3 w-3 mr-1 text-red-500" />;
-    }
-    return <FileCode className="h-3 w-3 mr-1 text-green-500" />;
-  };
+  // --- Trigger Button ---
 
-  // Button Trigger
   const TriggerButton = (
     <Button
       variant="ghost"
@@ -287,34 +124,32 @@ export function DocumentViewer({ source, index, onOpenDocument }: DocumentViewer
     >
       <div className="flex items-center w-full">
         {index && <span className="font-mono text-muted-foreground mr-1 text-[10px]">[{index}]</span>}
-        {getTypeIcon()}
+        <SourceTypeIcon source={source} />
         <span className="truncate max-w-[200px]">{source.title}</span>
-        {source.page_range && (
-          <Badge variant="outline" className="ml-1 text-[9px] px-1 py-0">{source.page_range}</Badge>
-        )}
+        {source.page_range && <Badge variant="outline" className="ml-1 text-[9px] px-1 py-0">{source.page_range}</Badge>}
         <Badge variant="secondary" className="ml-1 text-[9px] px-1 py-0">{Math.round(source.similarity * 100)}%</Badge>
       </div>
 
-      {/* Clickable URL subtitle for web sources */}
       {source.url && (
         <a
           href={source.url}
           target="_blank"
           rel="noopener noreferrer"
-          onClick={(e) => e.stopPropagation()} // Prevent triggering parent button's document viewer
+          onClick={(e) => e.stopPropagation()}
           className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground ml-5 mt-0.5 underline decoration-dotted underline-offset-2 transition-colors"
-          aria-label={`Open ${source.url} in new tab`}
           title={source.url}
         >
           <span>{formatCompactUrl(source.url)}</span>
-          <ExternalLink className="h-3 w-3" aria-hidden="true" />
+          <ExternalLink className="h-3 w-3" />
         </a>
       )}
     </Button>
   );
 
+  // Desktop: delegate to parent sidebar
   if (isDesktop && onOpenDocument) return TriggerButton;
 
+  // Mobile: use dialog
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>{TriggerButton}</DialogTrigger>
@@ -325,50 +160,13 @@ export function DocumentViewer({ source, index, onOpenDocument }: DocumentViewer
           </DialogTitle>
         </DialogHeader>
 
-        {/* Search toolbar for PDFs */}
-        {isPdf && !isLoading && !error && (
-          <div className="px-4 py-2 border-b bg-muted/5 flex items-center gap-2">
-            <Search className="h-4 w-4 text-muted-foreground" />
-            <Input
-              type="text"
-              placeholder="Search in document..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="h-8 text-sm flex-1"
-            />
-            {searchTerm && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setSearchTerm('')}
-                className="h-8 px-2"
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            )}
-          </div>
-        )}
-
         <div className="flex-1 overflow-auto">{renderContent()}</div>
-
-        {isPdf && !isLoading && !error && (
-          <div className="p-2 border-t bg-muted/10 flex justify-between items-center">
-            <div className="flex gap-1">
-              <Button variant="ghost" size="sm" onClick={() => setScale(s => Math.max(0.5, s - 0.25))}><ZoomOut className="h-4 w-4" /></Button>
-              <Button variant="ghost" size="sm" onClick={() => setScale(1)}><Maximize2 className="h-4 w-4" /></Button>
-              <Button variant="ghost" size="sm" onClick={() => setScale(s => Math.min(2, s + 0.25))}><ZoomIn className="h-4 w-4" /></Button>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => setPageNumber(p => Math.max(1, p - 1))} disabled={pageNumber <= 1}><ChevronLeft className="h-4 w-4" /></Button>
-              <span className="text-sm">{pageNumber} / {numPages}</span>
-              <Button variant="outline" size="sm" onClick={() => setPageNumber(p => Math.min(numPages, p + 1))} disabled={pageNumber >= numPages}><ChevronRight className="h-4 w-4" /></Button>
-            </div>
-          </div>
-        )}
       </DialogContent>
     </Dialog>
   );
 }
+
+// --- Sources List ---
 
 interface SourcesListProps {
   sources: Source[];
@@ -378,7 +176,7 @@ interface SourcesListProps {
 export function SourcesList({ sources, onOpenDocument }: SourcesListProps) {
   const [isExpanded, setIsExpanded] = useState(true);
 
-  if (!sources || sources.length === 0) return null;
+  if (!sources?.length) return null;
 
   return (
     <div className="mt-3 pt-3 border-t border-border/50">
@@ -386,23 +184,14 @@ export function SourcesList({ sources, onOpenDocument }: SourcesListProps) {
         onClick={() => setIsExpanded(!isExpanded)}
         className="flex items-center gap-1 text-xs text-muted-foreground mb-2 hover:text-foreground transition-colors"
       >
-        {isExpanded ? (
-          <ChevronDown className="h-3 w-3" />
-        ) : (
-          <ChevronRight className="h-3 w-3" />
-        )}
+        {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
         <span>Sources consultées ({sources.length})</span>
       </button>
 
       {isExpanded && (
         <div className="flex flex-wrap gap-1">
-          {sources.map((source, index) => (
-            <DocumentViewer
-              key={index}
-              source={source}
-              index={index + 1}
-              onOpenDocument={onOpenDocument}
-            />
+          {sources.map((source, i) => (
+            <DocumentViewer key={i} source={source} index={i + 1} onOpenDocument={onOpenDocument} />
           ))}
         </div>
       )}

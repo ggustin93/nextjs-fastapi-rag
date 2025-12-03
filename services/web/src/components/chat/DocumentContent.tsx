@@ -1,20 +1,12 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
-import dynamic from 'next/dynamic';
+import { useState, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Loader2, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Maximize2, AlertCircle, Search, X } from 'lucide-react';
+import { Loader2, AlertCircle } from 'lucide-react';
 import type { Source } from '@/types/chat';
 import { IframeViewer } from './IframeViewer';
-
-import 'react-pdf/dist/Page/TextLayer.css';
-import 'react-pdf/dist/Page/AnnotationLayer.css';
-
-const Document = dynamic(() => import('react-pdf').then((mod) => mod.Document), { ssr: false });
-const Page = dynamic(() => import('react-pdf').then((mod) => mod.Page), { ssr: false });
+import { PdfViewer } from './PdfViewer';
 
 // Helper to clean API URLs
 const getDocumentUrl = (path: string) => {
@@ -27,52 +19,20 @@ const getDocumentUrl = (path: string) => {
 };
 
 export function DocumentContent({ source }: { source: Source; showControls?: boolean }) {
-  const [numPages, setNumPages] = useState<number>(0);
-  const [pageNumber, setPageNumber] = useState<number>(1);
-  const [scale, setScale] = useState<number>(1.0);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [mdContent, setMdContent] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState<string>('');
 
   const isPdf = source.path.toLowerCase().endsWith('.pdf');
 
-  // Escape regex special characters
-  const escapeRegex = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-  // Custom text renderer for search highlighting
-  const customTextRenderer = useCallback(({ str }: { str: string }) => {
-    if (!searchTerm) return str;
-
-    const regex = new RegExp(`(${escapeRegex(searchTerm)})`, 'gi');
-    const parts = str.split(regex);
-
-    return parts
-      .map((part) =>
-        regex.test(part)
-          ? `<mark style="background-color: #fef08a; padding: 2px;">${part}</mark>`
-          : part
-      )
-      .join('');
-  }, [searchTerm]);
-
-  // 1. Worker Init
-  useEffect(() => {
-    if (isPdf) {
-      import('react-pdf').then((pdf) => {
-        pdf.pdfjs.GlobalWorkerOptions.workerSrc =
-          `https://unpkg.com/pdfjs-dist@${pdf.pdfjs.version}/build/pdf.worker.min.mjs`;
-      });
-    }
-  }, [isPdf]);
-
-  // 2. Data Fetch
+  // Data Fetch
   useEffect(() => {
     const controller = new AbortController();
     setIsLoading(true);
     setError(null);
     setMdContent(null);
+    setPdfUrl(null);
 
     let currentBlobUrl: string | null = null;
 
@@ -88,6 +48,7 @@ export function DocumentContent({ source }: { source: Source; showControls?: boo
           if (blob.size === 0) throw new Error("File empty");
           currentBlobUrl = URL.createObjectURL(blob);
           setPdfUrl(currentBlobUrl);
+          setIsLoading(false);
         } else {
           const text = await res.text();
           setMdContent(text);
@@ -112,13 +73,6 @@ export function DocumentContent({ source }: { source: Source; showControls?: boo
       }
     };
   }, [source.path, isPdf]);
-
-  // 3. Auto-scroll to source page when document loads
-  useEffect(() => {
-    if (isPdf && source.page_number) {
-      setPageNumber(source.page_number);
-    }
-  }, [isPdf, source.page_number, pdfUrl]);
 
   // Renderers
   const isWebSource = Boolean(source.url);
@@ -163,67 +117,14 @@ export function DocumentContent({ source }: { source: Source; showControls?: boo
     );
   }
 
-  // PDF rendering with search support
+  // PDF rendering using native browser viewer
   if (isPdf && pdfUrl) {
     return (
-      <div className="h-full flex flex-col">
-        {/* Search toolbar */}
-        {!isLoading && !error && (
-          <div className="px-4 py-2 border-b bg-muted/5 flex items-center gap-2">
-            <Search className="h-4 w-4 text-muted-foreground" />
-            <Input
-              type="text"
-              placeholder="Rechercher dans le document..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="h-8 text-sm flex-1"
-            />
-            {searchTerm && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setSearchTerm('')}
-                className="h-8 px-2"
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            )}
-          </div>
-        )}
-
-        <div className="flex-1 overflow-auto flex justify-center bg-muted/20 p-4">
-          <Document
-            file={pdfUrl}
-            onLoadSuccess={({ numPages }) => { setNumPages(numPages); setIsLoading(false); }}
-            onLoadError={(err) => setError(err.message)}
-            loading={<div className="flex items-center gap-2"><Loader2 className="animate-spin" /> Rendering...</div>}
-            className="shadow-lg"
-          >
-            <Page
-              pageNumber={pageNumber}
-              scale={scale}
-              renderTextLayer={true}
-              customTextRenderer={customTextRenderer}
-              renderAnnotationLayer={false}
-            />
-          </Document>
-        </div>
-
-        {!isLoading && (
-          <div className="p-3 border-t flex justify-between items-center bg-background">
-             <div className="flex gap-1">
-              <Button variant="ghost" size="sm" onClick={() => setScale(s => Math.max(0.5, s - 0.25))}><ZoomOut className="h-4 w-4" /></Button>
-              <Button variant="ghost" size="sm" onClick={() => setScale(1)}><Maximize2 className="h-4 w-4" /></Button>
-              <Button variant="ghost" size="sm" onClick={() => setScale(s => Math.min(2, s + 0.25))}><ZoomIn className="h-4 w-4" /></Button>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => setPageNumber(p => Math.max(1, p - 1))} disabled={pageNumber <= 1}><ChevronLeft className="h-4 w-4" /></Button>
-              <span className="text-sm font-medium w-16 text-center">{pageNumber} / {numPages}</span>
-              <Button variant="outline" size="sm" onClick={() => setPageNumber(p => Math.min(numPages, p + 1))} disabled={pageNumber >= numPages}><ChevronRight className="h-4 w-4" /></Button>
-            </div>
-          </div>
-        )}
-      </div>
+      <PdfViewer
+        file={pdfUrl}
+        pageNumber={source.page_number || 1}
+        onLoadError={(err) => setError(err.message)}
+      />
     );
   }
 

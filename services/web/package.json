@@ -22,11 +22,10 @@
     "clsx": "^2.1.1",
     "lucide-react": "^0.554.0",
     "mermaid": "^11.12.2",
-    "next": "15.5.6",
+    "next": "^15.5.7",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "react-markdown": "^10.1.0",
-    "react-pdf": "^10.2.0",
     "react-resizable-panels": "^3.0.6",
     "remark-gfm": "^4.0.1",
     "tailwind-merge": "^3.4.0"
