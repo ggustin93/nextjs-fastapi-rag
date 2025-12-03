@@ -2,10 +2,39 @@
 
 A production-ready, domain-agnostic RAG (Retrieval-Augmented Generation) system for building document-based Q&A applications. Clean architecture with optional domain customization and external API integration.
 
-## Features
+## Table of Contents
+
+1. [Features](#1-features)
+2. [Tech Stack](#2-tech-stack)
+3. [Architecture](#3-architecture)
+   - [3.1 Ingestion Pipeline](#31-ingestion-pipeline)
+   - [3.2 Retrieval Pipeline](#32-retrieval-pipeline)
+   - [3.3 Configuration](#33-configuration)
+4. [Project Structure](#4-project-structure)
+5. [Getting Started](#5-getting-started)
+   - [5.1 Prerequisites](#51-prerequisites)
+   - [5.2 Python Environment](#52-python-environment)
+   - [5.3 Quick Start](#53-quick-start)
+   - [5.4 Endpoints](#54-endpoints)
+6. [Development](#6-development)
+   - [6.1 Code Quality](#61-code-quality)
+   - [6.2 Testing](#62-testing)
+7. [DevOps](#7-devops)
+   - [7.1 Docker](#71-docker)
+   - [7.2 CI/CD](#72-cicd)
+   - [7.3 Make Commands](#73-make-commands)
+8. [Configuration](#8-configuration)
+9. [Customization](#9-customization)
+   - [9.1 System Prompt](#91-system-prompt)
+   - [9.2 Adding Custom Tools](#92-adding-custom-tools)
+   - [9.3 Agent Configuration](#93-agent-configuration)
+10. [Design Decisions](#10-design-decisions)
+11. [License](#11-license)
+
+## 1. Features
 
 - **Streaming Chat** - Real-time responses via Server-Sent Events (SSE)
-- **Hybrid Search** - Vector similarity + French full-text search with RRF fusion
+- **Hybrid Search** - Vector similarity + full-text search with RRF fusion
 - **Multi-Format Ingestion** - PDF, Word, HTML, Markdown via Docling
 - **Web Scraping** - Crawl4AI for automated content extraction
 - **Source Citations** - Every response includes ranked document sources
@@ -13,7 +42,7 @@ A production-ready, domain-agnostic RAG (Retrieval-Augmented Generation) system 
 - **Domain-Agnostic** - Works generically or with optional domain configuration
 - **Extensible** - Add external API tools following clean patterns
 
-## Tech Stack
+## 2. Tech Stack
 
 | Layer | Technology |
 |-------|------------|
@@ -24,268 +53,90 @@ A production-ready, domain-agnostic RAG (Retrieval-Augmented Generation) system 
 | Testing | Pytest, Jest |
 | DevOps | Docker, GitHub Actions, UV |
 
-## Architecture
+## 3. Architecture
+
+### 3.1 Ingestion Pipeline
 
 ```mermaid
-flowchart TB
-    subgraph Client["Client Layer"]
-        UI[Next.js App]
+graph LR
+    subgraph Sources
+        PDF[PDF Files]
+        WEB[Web Pages]
     end
 
-    subgraph API["API Layer"]
-        GW[FastAPI]
-        AGENT[PydanticAI Agent]
-    end
+    PDF --> DOC[Docling]
+    WEB --> C4A[Crawl4AI]
+    DOC --> MD[Markdown]
+    C4A --> MD
+    MD --> CHK[Chunking]
+    CHK --> EMB[Embeddings]
+    EMB --> DB[(pgvector)]
 
-    subgraph Data["Data Layer"]
-        PG[(PostgreSQL)]
-        VEC[pgvector]
-        CACHE[AsyncLRUCache]
-    end
-
-    subgraph External["External Services"]
-        LLM[OpenAI API]
-        EMB[Embeddings API]
-    end
-
-    subgraph Pipeline["Ingestion Pipeline"]
-        CRAWL[Crawl4AI]
-        DOC[Docling]
-        CHUNK[HybridChunker]
-        EMBED[EmbeddingGenerator]
-    end
-
-    UI -->|SSE| GW
-    GW --> AGENT
-    AGENT --> PG
-    PG --> VEC
-    AGENT --> CACHE
-    AGENT --> LLM
-    AGENT --> EMB
-
-    CRAWL --> DOC
-    DOC --> CHUNK
-    CHUNK --> EMBED
-    EMBED --> PG
+    style PDF fill:#ffe4e6,stroke:#f43f5e
+    style WEB fill:#e0f2fe,stroke:#0ea5e9
+    style DOC fill:#ffe4e6,stroke:#f43f5e
+    style C4A fill:#e0f2fe,stroke:#0ea5e9
+    style CHK fill:#fef3c7,stroke:#f59e0b
+    style EMB fill:#d1fae5,stroke:#10b981
+    style DB fill:#d1fae5,stroke:#10b981
 ```
 
-## Detailed System Architecture
+| Step | Tool | Description |
+|------|------|-------------|
+| **Parse** | Docling | Parses PDFs preserving structure (tables, headers, lists) |
+| **Scrape** | Crawl4AI | Scrapes websites with JS rendering, extracts clean markdown |
+| **Chunk** | HybridChunker | Splits into ~512 token chunks with 50 overlap |
+| **Embed** | OpenAI | text-embedding-3-small → 1536D vectors in pgvector |
 
-### System Components
+### 3.2 Retrieval Pipeline
 
 ```mermaid
-flowchart LR
-    subgraph Client["🎨 Presentation Layer"]
-        UI[Next.js App<br/>App Router + useChat Hook]
-    end
+graph LR
+    Q[Query] --> QE[Query Expansion]
+    QE --> E[Embed]
+    E --> V[(pgvector)]
+    E --> F[Full-Text Search]
+    V --> |Top-K| R[RRF Fusion]
+    F --> |Top-K| R
+    R --> TR[Title Rerank]
+    TR --> C[Context]
+    C --> L[LLM]
+    L --> S[Stream SSE]
 
-    subgraph API["🔌 API Gateway Layer"]
-        GW[FastAPI Gateway<br/>CORS + Middleware]
-        HEALTH[Health Checks<br/>Liveness/Readiness]
-    end
-
-    subgraph Logic["🧠 Business Logic Layer"]
-        AGENT[PydanticAI Agent<br/>RAG Orchestration]
-        CTX[RAGContext<br/>Dependency Injection]
-        TOOLS[Tool System<br/>search_knowledge_base]
-    end
-
-    subgraph Data["💾 Data & Cache Layer"]
-        CACHE[AsyncLRUCache<br/>Query + Metadata]
-        PG[(PostgreSQL<br/>+ pgvector)]
-        HISTORY[Message History<br/>Per Session]
-    end
-
-    subgraph Config["⚙️ Configuration Layer"]
-        CONF[Centralized Config<br/>Multi-Provider LLM]
-        DOMAIN[Domain Config<br/>Optional Synonyms]
-    end
-
-    subgraph External["☁️ External Services"]
-        LLM[OpenAI/Ollama<br/>Chutes.ai]
-        EMB[Embeddings API<br/>text-embedding-3]
-        DOC[Docling + Crawl4AI<br/>Document Processing]
-    end
-
-    %% Critical SSE Streaming Path
-    UI -.->|SSE Stream<br/>token/sources/done| GW
-    GW -.->|Progressive Updates| UI
-
-    %% API Layer Connections
-    UI -->|POST /api/v1/chat/stream| GW
-    GW --> HEALTH
-    GW --> AGENT
-
-    %% Business Logic Flow
-    AGENT --> CTX
-    CTX -.->|Injects deps| AGENT
-    AGENT --> TOOLS
-    TOOLS -->|See RAG Pipeline ⭐| CACHE
-
-    %% Data Layer with Cache-First
-    CACHE -->|Cache Miss| PG
-    PG -->|Vector + FTS| CACHE
-    AGENT --> HISTORY
-
-    %% Configuration
-    CONF -.->|LLM Provider| AGENT
-    DOMAIN -.->|Query Expansion| TOOLS
-
-    %% External Services
-    AGENT --> LLM
-    AGENT --> EMB
-    DOC --> PG
-
-    %% Styling
-    style Client fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
-    style API fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
-    style Logic fill:#fff3e0,stroke:#f57c00,stroke-width:2px
-    style Data fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
-    style Config fill:#fce4ec,stroke:#c2185b,stroke-width:2px
-    style External fill:#f5f5f5,stroke:#616161,stroke-width:2px
-
-    %% Annotations
-    classDef criticalPath stroke:#c62828,stroke-width:3px,stroke-dasharray: 5 5
-    class UI,GW criticalPath
+    style Q fill:#f1f5f9,stroke:#64748b
+    style QE fill:#fef3c7,stroke:#f59e0b
+    style V fill:#ede9fe,stroke:#8b5cf6
+    style F fill:#e0e7ff,stroke:#6366f1
+    style R fill:#ccfbf1,stroke:#14b8a6
+    style TR fill:#fce7f3,stroke:#ec4899
+    style L fill:#fef3c7,stroke:#d97706
+    style S fill:#dcfce7,stroke:#16a34a
 ```
 
-Our RAG system uses a layered architecture with sophisticated patterns:
+| Step | Component | Description |
+|------|-----------|-------------|
+| **1. Query Expansion** | LLM (gpt-4o-mini) | Adds domain synonyms to improve recall |
+| **2. Vector Search** | pgvector | Cosine similarity on 1536D embeddings |
+| **3. Full-Text Search** | PostgreSQL | Keyword search with language stemming |
+| **4. RRF Fusion** | Custom | Merges rankings with k=50 |
+| **5. Title Rerank** | Custom | Boosts documents with matching titles +15% |
 
-**Key Architectural Patterns:**
-- **Streaming SSE**: Real-time progressive updates via Server-Sent Events (not WebSocket)
-- **Dependency Injection**: Type-safe context via PydanticAI RunContext
-- **Cache-First Strategy**: AsyncLRUCache before database queries
-- **3-Stage RAG Pipeline**: See [RAG Search Pipeline](#rag-search-pipeline) section below for details
-- **Multi-Provider LLM**: Configuration-driven (OpenAI, Ollama, Chutes.ai)
-- **Tool System**: Extensible external API integration pattern
+> **RAG Best Practices**: Query Expansion fixes vocabulary mismatch between user queries and document terminology. Title Reranking improves precision by surfacing documents with relevant titles.
 
-### Request Flow
-
-```mermaid
-sequenceDiagram
-    participant FE as Frontend<br/>(useChat Hook)
-    participant API as FastAPI<br/>(chat.py)
-    participant Agent as RAG Agent<br/>(PydanticAI)
-    participant Tools as search_knowledge_base
-    participant DB as PostgreSQL<br/>+ pgvector
-    participant LLM as OpenAI API
-
-    FE->>API: POST /api/v1/stream<br/>{message, session_id}
-    activate API
-
-    API->>Agent: Create RAGContext + Agent instance
-    API->>Agent: Run agent with message
-    activate Agent
-
-    Agent->>Tools: search_knowledge_base(query)
-    activate Tools
-    Tools->>DB: Hybrid Search (Vector + FTS + RRF)
-    DB-->>Tools: Ranked chunks (TOC filtered)
-    Tools-->>Agent: Top sources with similarity scores
-    deactivate Tools
-
-    Agent->>LLM: Generate response with context
-    activate LLM
-
-    loop Streaming Tokens
-        LLM-->>Agent: Token chunk
-        Agent-->>API: event: "token"
-        API-.->FE: SSE: data: {"token": "..."}
-        Note over FE: Append to message in real-time
-    end
-
-    LLM-->>Agent: Complete response
-    deactivate LLM
-
-    Agent-->>API: event: "sources"
-    API-.->FE: SSE: data: {"sources": [...]}
-    Note over FE: Update sources + cited indices
-
-    Agent-->>API: event: "done"
-    API-.->FE: SSE: data: "done"
-    deactivate Agent
-
-    Note over FE: Stream complete, show sources
-    deactivate API
-```
-
-This sequence diagram shows how a chat request flows through the system with progressive streaming updates.
-
-## RAG Search Pipeline
-
-Our RAG system uses a streamlined 3-stage pipeline optimized for French technical content:
-
-### Pipeline Overview
-
-```mermaid
-flowchart TD
-    subgraph Input["🔍 Stage 1: Query Processing"]
-        Query[User Query]
-        Query --> Expand[Expand Query<br/>domain synonyms]
-        Query --> Embed[Generate Embeddings]
-    end
-
-    subgraph Search["🔎 Stage 2: Hybrid Search"]
-        Embed --> Vector[Vector Similarity<br/>Semantic Search]
-        Expand --> FTS[Full-Text Search<br/>French + Keyword]
-        Vector --> RRF[Reciprocal Rank Fusion]
-        FTS --> RRF
-        RRF --> Results[Ranked Chunks]
-    end
-
-    subgraph Filter["🧹 Stage 3: Quality Filtering"]
-        Results --> TOC{Filter TOC<br/>Chunks?}
-        TOC -->|Remove| Discard[❌ Discard TOC]
-        TOC -->|Keep| Clean[Clean Results]
-        Clean --> LLM[🤖 Feed to LLM]
-    end
-
-    LLM --> Response[📝 Response with Citations]
-
-    style Input fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
-    style Search fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
-    style Filter fill:#fff3e0,stroke:#f57c00,stroke-width:2px
-    style Response fill:#ffebee,stroke:#c62828,stroke-width:2px
-```
-
-### Stage Details
-
-**🔍 Stage 1: Query Processing**
-- **Query Expansion**: Adds domain-specific synonyms for full-text search
-  - Example: "type D" → "type D OR dispense OR 50 m² OR 24 heures"
-- **Embedding Generation**: Creates vector representation for semantic search
-- **Direct Query Use**: User's original query preserved for intent accuracy
-
-**🔎 Stage 2: Hybrid Search**
-- **Vector Similarity**: Semantic search using embeddings (finds conceptually similar content)
-- **Full-Text Search**: Keyword matching with French language support
-- **RRF Fusion**: Combines both approaches using Reciprocal Rank Fusion algorithm
-- **Result**: Ranked chunks combining semantic understanding with keyword precision
-
-**🧹 Stage 3: Quality Filtering**
-- **TOC Detection**: Removes table of contents chunks that pollute results
-- **Similarity Threshold**: Filters low-relevance chunks at the database level
-- **LLM Context**: Filtered chunks fed to LLM with full context
-- **Result**: Response with numbered source citations [1], [2], etc.
-
-### Configuration
-
-Customize retrieval behavior via environment variables:
+### 3.3 Configuration
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `QUERY_EXPANSION_ENABLED` | true | Enable LLM query expansion |
+| `QUERY_EXPANSION_MODEL` | gpt-4o-mini | Model for query expansion |
+| `TITLE_RERANK_ENABLED` | true | Enable title-based reranking |
+| `TITLE_RERANK_BOOST` | 0.15 | Max boost for title matches (+15%) |
 | `SEARCH_DEFAULT_LIMIT` | 30 | Max chunks from hybrid search |
 | `SEARCH_SIMILARITY_THRESHOLD` | 0.25 | Minimum similarity (25%) |
-| `OUT_OF_SCOPE_THRESHOLD` | 0.40 | Below this = question likely out of scope |
-| `MAX_CHUNKS_PER_DOCUMENT` | 5 | Limit per source document |
 | `RRF_K` | 50 | RRF ranking parameter |
 | `EXCLUDE_TOC` | true | Filter out TOC chunks |
 
-> **📖 Note:** This simplified pipeline was optimized after testing showed that reranking and query reformulation hurt accuracy for French technical content. See [Troubleshooting Guide](docs/TROUBLESHOOT.md) for details.
-
-See [Configuration](#configuration) section for more details.
-
-## Project Structure
+## 4. Project Structure
 
 ```
 nextjs-fastapi-rag/
@@ -313,16 +164,34 @@ nextjs-fastapi-rag/
 └── Makefile                # Development commands
 ```
 
-## Getting Started
+## 5. Getting Started
 
-### Prerequisites
+### 5.1 Prerequisites
 
-- Python 3.9+
+- Python 3.10+ (required for PydanticAI 1.x)
 - Node.js 20+
 - PostgreSQL with pgvector extension
 - OpenAI API key
 
-### Quick Start
+### 5.2 Python Environment
+
+This project uses a **single virtual environment** at the project root:
+
+```bash
+# Create venv (if not exists)
+uv venv .venv --python 3.11
+
+# Install dependencies
+uv pip install -e .
+
+# Or with pip
+pip install -e .
+```
+
+> ⚠️ **Note**: Do NOT create a venv inside `services/api/`. The root `.venv` is used everywhere.
+> Docker builds use `pyproject.toml` directly without a venv.
+
+### 5.3 Quick Start
 
 ```bash
 # Install dependencies
@@ -345,7 +214,7 @@ make ingest
 make run
 ```
 
-### Endpoints
+### 5.4 Endpoints
 
 | Service | URL |
 |---------|-----|
@@ -354,9 +223,9 @@ make run
 | Health | http://localhost:8000/health |
 | API Docs | http://localhost:8000/docs |
 
-## Development
+## 6. Development
 
-### Code Quality
+### 6.1 Code Quality
 
 Pre-commit hooks automatically check code quality before each commit:
 
@@ -376,7 +245,7 @@ make pre-commit-update
 - **JavaScript/TypeScript**: ESLint and type checking
 - **General**: Trailing whitespace, EOF newlines, YAML syntax, secret detection
 
-### Testing
+### 6.2 Testing
 
 ```bash
 make test              # All tests
@@ -385,9 +254,9 @@ make test-frontend     # Frontend only
 make test-unit         # Unit tests only
 ```
 
-## DevOps
+## 7. DevOps
 
-### Docker
+### 7.1 Docker
 
 ```bash
 make docker-build      # Build images
@@ -395,7 +264,7 @@ make docker-up         # Start containers
 make docker-down       # Stop containers
 ```
 
-### CI/CD
+### 7.2 CI/CD
 
 GitHub Actions runs on push/PR:
 - Linting (ruff, eslint)
@@ -403,7 +272,7 @@ GitHub Actions runs on push/PR:
 - Unit tests
 - Integration tests
 
-### Make Commands
+### 7.3 Make Commands
 
 ```bash
 make help                  # Show all available commands
@@ -418,7 +287,7 @@ make format                # Format code
 make clean                 # Remove artifacts
 ```
 
-## Configuration
+## 8. Configuration
 
 ```bash
 # Required
@@ -439,22 +308,22 @@ RRF_K=50                            # RRF ranking parameter
 EXCLUDE_TOC=true                    # Filter out TOC chunks
 ```
 
-> **📖 Troubleshooting:** For retrieval quality issues, see [docs/TROUBLESHOOT.md](docs/TROUBLESHOOT.md).
+> **Troubleshooting:** For retrieval quality issues, see [docs/TROUBLESHOOT.md](docs/TROUBLESHOOT.md).
 
-## Customization
+## 9. Customization
 
-### System Prompt
+### 9.1 System Prompt
 
 Customize the RAG agent's behavior via `RAG_SYSTEM_PROMPT` environment variable:
 
 ```bash
-# Example: Legal domain
-export RAG_SYSTEM_PROMPT="Tu es un expert juridique belge..."
+# Example: Custom domain
+export RAG_SYSTEM_PROMPT="You are an expert assistant for..."
 ```
 
-Default: Generic French knowledge assistant with numbered source citations.
+Default: Generic knowledge assistant with numbered source citations.
 
-### Adding Custom Tools
+### 9.2 Adding Custom Tools
 
 The system uses a tool registry pattern for easy extensibility:
 
@@ -493,7 +362,7 @@ ENABLED_TOOLS='[]'
 
 See `packages/core/tools/weather_tool.py` for a complete implementation example.
 
-### Agent Configuration
+### 9.3 Agent Configuration
 
 Create custom agent instances using the factory pattern:
 
@@ -512,7 +381,7 @@ agent = create_rag_agent(
 
 The factory ensures consistent configuration across CLI, API, and tests.
 
-## Design Decisions
+## 10. Design Decisions
 
 | Decision | Rationale |
 |----------|-----------|
@@ -527,17 +396,6 @@ The factory ensures consistent configuration across CLI, API, and tests.
 | **SSE** | Simpler than WebSocket for streaming chat |
 | **UV** | Faster dependency resolution than pip |
 
-## Architecture Principles
-
-- **SOLID**: Single responsibility, dependency inversion
-- **KISS**: Simple solutions over complex abstractions
-- **DRY**: Reusable configuration and tool patterns
-- **YAGNI**: No speculative features, build what's needed
-
-## Disclaimer
-
-This project was developed with assistance from [Claude Code](https://claude.ai/claude-code), Anthropic's AI coding assistant.
-
-## License
+## 11. License
 
 Apache 2.0

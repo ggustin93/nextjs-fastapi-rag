@@ -11,13 +11,13 @@ This guide will help you quickly get the Next.js chat interface running with the
 ## Step 1: Start the Backend
 
 ```bash
+# From project root - use the restart script (recommended)
+cd scripts && ./restart-servers.sh
+
+# Or manually:
 cd services/api
-
-# Activate virtual environment
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Start the FastAPI server
-uvicorn app.main:app --reload
+source ../../.venv/bin/activate  # Uses root .venv (Python 3.10+)
+PYTHONPATH=../.. uvicorn app.main:app --reload
 ```
 
 The backend will be available at `http://localhost:8000`
@@ -101,11 +101,10 @@ nextjs-fastapi-rag/
 │   └── ingestion/         # Document processing
 ├── services/              # Deployable services
 │   ├── api/               # FastAPI backend
-│   │   ├── app/
-│   │   │   ├── main.py    # FastAPI app with CORS
-│   │   │   ├── core/      # RAG wrapper
-│   │   │   └── routers/   # Chat endpoint
-│   │   └── requirements.txt
+│   │   └── app/
+│   │       ├── main.py    # FastAPI app with CORS
+│   │       ├── core/      # RAG wrapper
+│   │       └── routers/   # Chat endpoint
 │   └── web/               # Next.js frontend
 │       ├── src/
 │       │   ├── app/       # Next.js App Router
