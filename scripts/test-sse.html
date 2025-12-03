@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SSE Test</title>
+</head>
+<body>
+    <h1>Testing SSE Stream</h1>
+    <button onclick="testStream()">Test Stream</button>
+    <pre id="output"></pre>
+
+    <script>
+        async function testStream() {
+            const output = document.getElementById('output');
+            output.textContent = 'Starting stream test...\n';
+
+            try {
+                const response = await fetch('http://localhost:8000/api/v1/chat/stream', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        message: 'Test simple',
+                    }),
+                });
+
+                output.textContent += `Response status: ${response.status}\n`;
+                output.textContent += `Response headers: ${JSON.stringify(Object.fromEntries(response.headers), null, 2)}\n\n`;
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+                let eventCount = 0;
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+                    const events = buffer.split('\n\n');
+                    buffer = events.pop() || '';
+
+                    for (const eventText of events) {
+                        if (!eventText.trim()) continue;
+
+                        eventCount++;
+                        output.textContent += `\n--- Event ${eventCount} ---\n`;
+                        output.textContent += eventText + '\n';
+
+                        // Parse the event
+                        let eventType = null;
+                        let data = null;
+
+                        for (const line of eventText.split('\n')) {
+                            if (line.startsWith('event:')) {
+                                eventType = line.slice(6).trim();
+                            } else if (line.startsWith('data:')) {
+                                data = line.slice(5).trim();
+                            }
+                        }
+
+                        if (eventType && data) {
+                            try {
+                                const parsed = JSON.parse(data);
+                                output.textContent += `Parsed: type=${eventType}, content="${parsed.content}"\n`;
+                            } catch (e) {
+                                output.textContent += `Parse error: ${e.message}\n`;
+                            }
+                        }
+                    }
+                }
+
+                output.textContent += `\n\nStream completed. Total events: ${eventCount}\n`;
+            } catch (error) {
+                output.textContent += `\n\nError: ${error.message}\n${error.stack}\n`;
+            }
+        }
+    </script>
+</body>
+</html>
