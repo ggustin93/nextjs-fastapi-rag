@@ -68,6 +68,13 @@ const nextConfig: NextConfig = {
     // Optimize package imports for better tree-shaking
     optimizePackageImports: ["lucide-react", "@radix-ui/react-dialog"],
   },
+
+  // Webpack configuration for react-pdf compatibility
+  webpack: (config) => {
+    // Ensure canvas polyfill doesn't break SSR
+    config.resolve.alias.canvas = false;
+    return config;
+  },
 };
 
 export default withBundleAnalyzer(nextConfig);
