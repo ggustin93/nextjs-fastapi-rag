@@ -20,8 +20,14 @@ PROCESSED_DIR = DATA_DIR / "processed"
 # Provider is derived from MODEL_PROVIDERS in factory.py
 MODEL_DISPLAY_INFO = {
     "gpt-4o-mini": {"name": "GPT-4o Mini", "description": "Fast, cost-effective"},
-    "mistral-small-latest": {"name": "Mistral Small", "description": "Fast, efficient with tool support"},
-    "mistral-large-latest": {"name": "Mistral Large", "description": "Frontier model, advanced reasoning"},
+    "mistral-small-latest": {
+        "name": "Mistral Small",
+        "description": "Fast, efficient with tool support",
+    },
+    "mistral-large-latest": {
+        "name": "Mistral Large",
+        "description": "Frontier model, advanced reasoning",
+    },
 }
 
 
@@ -63,6 +69,14 @@ async def get_system_config():
             "provider": "Supabase pgvector",
             "collection": "documents",
         },
+        "retrieval": {
+            "query_expansion_enabled": settings.search.query_expansion_enabled,
+            "query_expansion_model": settings.search.query_expansion_model,
+            "title_rerank_enabled": settings.search.title_rerank_enabled,
+            "title_rerank_boost": settings.search.title_rerank_boost,
+            "rrf_k": settings.search.rrf_k,
+            "similarity_threshold": settings.search.similarity_threshold,
+        },
     }
 
 
@@ -79,13 +93,15 @@ async def get_available_models():
 
     for model_id, display_info in MODEL_DISPLAY_INFO.items():
         provider = MODEL_PROVIDERS.get(model_id, "openai")
-        models.append({
-            "id": model_id,
-            "name": display_info["name"],
-            "provider": provider,
-            "description": display_info["description"],
-            "is_current": model_id == current_model,
-        })
+        models.append(
+            {
+                "id": model_id,
+                "name": display_info["name"],
+                "provider": provider,
+                "description": display_info["description"],
+                "is_current": model_id == current_model,
+            }
+        )
 
     return {"models": models, "current": current_model}
 
@@ -125,13 +141,15 @@ async def get_ingested_documents():
                 # Get file stats
                 stats = file_path.stat()
 
-                documents.append({
-                    "filename": file_path.name,
-                    "path": str(file_path.relative_to(PROJECT_ROOT)),
-                    "size": stats.st_size,
-                    "ingested_at": datetime.fromtimestamp(stats.st_mtime).isoformat(),
-                    "type": file_type,
-                })
+                documents.append(
+                    {
+                        "filename": file_path.name,
+                        "path": str(file_path.relative_to(PROJECT_ROOT)),
+                        "size": stats.st_size,
+                        "ingested_at": datetime.fromtimestamp(stats.st_mtime).isoformat(),
+                        "type": file_type,
+                    }
+                )
 
     # Scan processed directory for scraped content
     if PROCESSED_DIR.exists():
@@ -151,13 +169,15 @@ async def get_ingested_documents():
                 # Get file stats
                 stats = file_path.stat()
 
-                documents.append({
-                    "filename": file_path.name,
-                    "path": str(file_path.relative_to(PROJECT_ROOT)),
-                    "size": stats.st_size,
-                    "ingested_at": datetime.fromtimestamp(stats.st_mtime).isoformat(),
-                    "type": file_type,
-                })
+                documents.append(
+                    {
+                        "filename": file_path.name,
+                        "path": str(file_path.relative_to(PROJECT_ROOT)),
+                        "size": stats.st_size,
+                        "ingested_at": datetime.fromtimestamp(stats.st_mtime).isoformat(),
+                        "type": file_type,
+                    }
+                )
 
     # Sort by most recently ingested
     documents.sort(key=lambda x: x["ingested_at"], reverse=True)
@@ -224,12 +244,14 @@ async def get_scraped_sources():
                 except Exception:
                     pass  # Use default if reading fails
 
-            sources.append({
-                "url": url,
-                "title": title,
-                "pages_count": len(data["files"]),
-                "scraped_at": datetime.fromtimestamp(data["latest_mtime"]).isoformat(),
-            })
+            sources.append(
+                {
+                    "url": url,
+                    "title": title,
+                    "pages_count": len(data["files"]),
+                    "scraped_at": datetime.fromtimestamp(data["latest_mtime"]).isoformat(),
+                }
+            )
 
     # Sort by most recently scraped
     sources.sort(key=lambda x: x["scraped_at"], reverse=True)

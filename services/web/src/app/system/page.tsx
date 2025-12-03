@@ -1,13 +1,21 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import { ChevronDown, FileText, Globe, Database, Zap, ArrowLeft, ExternalLink, Search } from 'lucide-react';
+import { ChevronDown, FileText, Globe, Database, Zap, ArrowLeft, ExternalLink, Search, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 
 interface SystemConfig {
   llm: { model: string; provider: string };
   embeddings: { model: string; dimensions: number };
   chunking: { chunk_size: number; chunk_overlap: number };
+  retrieval?: {
+    query_expansion_enabled: boolean;
+    query_expansion_model: string;
+    title_rerank_enabled: boolean;
+    title_rerank_boost: number;
+    rrf_k: number;
+    similarity_threshold: number;
+  };
 }
 
 interface Document {
@@ -52,7 +60,7 @@ function MermaidDiagram({ chart }: { chart: string }) {
     const loadMermaid = async () => {
       const mermaid = (await import('mermaid')).default;
       mermaid.initialize({ startOnLoad: false, theme: 'neutral', themeVariables: { fontSize: '14px' } });
-      
+
       if (ref.current) {
         try {
           ref.current.innerHTML = '';
@@ -70,17 +78,17 @@ function MermaidDiagram({ chart }: { chart: string }) {
 }
 
 // Collapsible section
-function Section({ 
-  title, 
-  icon: Icon, 
-  isOpen, 
-  onToggle, 
+function Section({
+  title,
+  icon: Icon,
+  isOpen,
+  onToggle,
   badge,
-  children 
-}: { 
-  title: string; 
-  icon: typeof FileText; 
-  isOpen: boolean; 
+  children
+}: {
+  title: string;
+  icon: typeof FileText;
+  isOpen: boolean;
   onToggle: () => void;
   badge?: number;
   children: React.ReactNode;
@@ -114,7 +122,7 @@ export default function SystemPage() {
 
   useEffect(() => {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
-    
+
     const fetchAll = async () => {
       setLoading(true);
       try {
@@ -139,7 +147,7 @@ export default function SystemPage() {
         setLoading(false);
       }
     };
-    
+
     fetchAll();
   }, []);
 
@@ -183,10 +191,10 @@ export default function SystemPage() {
         {/* Sections */}
         <div className="space-y-3">
           {/* Data Sources - PRIMARY */}
-          <Section 
-            title="Data Sources" 
-            icon={Database} 
-            isOpen={isOpen('sources')} 
+          <Section
+            title="Data Sources"
+            icon={Database}
+            isOpen={isOpen('sources')}
             onToggle={() => toggle('sources')}
             badge={pdfDocs.length + webSources.length}
           >
@@ -194,7 +202,7 @@ export default function SystemPage() {
               {/* PDF Documents */}
               <div>
                 <h4 className="text-sm font-medium text-slate-700 mb-3 flex items-center gap-1.5">
-                  <FileText className="w-3.5 h-3.5" /> 
+                  <FileText className="w-3.5 h-3.5" />
                   PDF Documents
                   <span className="text-slate-400 font-normal">({pdfDocs.length})</span>
                 </h4>
@@ -219,7 +227,7 @@ export default function SystemPage() {
               {/* Web Sources */}
               <div>
                 <h4 className="text-sm font-medium text-slate-700 mb-3 flex items-center gap-1.5">
-                  <Globe className="w-3.5 h-3.5" /> 
+                  <Globe className="w-3.5 h-3.5" />
                   Web Sources
                   <span className="text-slate-400 font-normal">({webSources.length})</span>
                 </h4>
@@ -238,12 +246,12 @@ export default function SystemPage() {
                           return site.title;
                         }
                       })();
-                      
+
                       return (
                         <div key={i} className="flex justify-between items-center text-sm py-2 px-3 bg-slate-50 rounded border border-slate-100 hover:border-slate-200">
-                          <a 
-                            href={site.url} 
-                            target="_blank" 
+                          <a
+                            href={site.url}
+                            target="_blank"
                             rel="noopener noreferrer"
                             className="text-slate-700 hover:text-blue-600 truncate flex-1 flex items-center gap-1.5"
                             title={site.url}
@@ -271,7 +279,7 @@ export default function SystemPage() {
         PDF[PDF Files]
         WEB[Web Pages]
     end
-    
+
     PDF --> DOC[Docling]
     WEB --> C4A[Crawl4AI]
     DOC --> MD[Markdown]
@@ -279,7 +287,7 @@ export default function SystemPage() {
     MD --> CHK[Chunking]
     CHK --> EMB[Embeddings]
     EMB --> DB[(pgvector)]
-    
+
     style PDF fill:#ffe4e6,stroke:#f43f5e
     style WEB fill:#e0f2fe,stroke:#0ea5e9
     style DOC fill:#ffe4e6,stroke:#f43f5e
@@ -300,7 +308,7 @@ export default function SystemPage() {
                     Parses PDFs preserving structure (tables, headers, lists).
                   </p>
                 </div>
-                
+
                 <div className="bg-sky-50 rounded-lg p-4 border border-sky-200">
                   <div className="flex items-center gap-2 mb-2">
                     <Globe className="w-4 h-4 text-sky-600" />
@@ -310,7 +318,7 @@ export default function SystemPage() {
                     Scrapes websites with JS rendering, extracts clean markdown.
                   </p>
                 </div>
-                
+
                 <div className="bg-amber-50 rounded-lg p-4 border border-amber-200">
                   <div className="flex items-center gap-2 mb-2">
                     <Zap className="w-4 h-4 text-amber-600" />
@@ -320,7 +328,7 @@ export default function SystemPage() {
                     Splits into ~{config?.chunking.chunk_size || 512} token chunks with {config?.chunking.chunk_overlap || 50} overlap.
                   </p>
                 </div>
-                
+
                 <div className="bg-emerald-50 rounded-lg p-4 border border-emerald-200">
                   <div className="flex items-center gap-2 mb-2">
                     <Database className="w-4 h-4 text-emerald-600" />
@@ -347,53 +355,100 @@ export default function SystemPage() {
               {/* Mermaid Diagram */}
               <div className="bg-white rounded-lg border border-slate-200 p-6">
                 <MermaidDiagram chart={`graph LR
-    Q[Query] --> E[Embed]
+    Q[Query] --> QE[Query Expansion]
+    QE --> E[Embed]
     E --> V[(pgvector)]
     E --> F[French FTS]
     V --> |Top-K| R[RRF Fusion]
     F --> |Top-K| R
-    R --> C[Context]
+    R --> TR[Title Rerank]
+    TR --> C[Context]
     C --> L[${config?.llm.model?.split('/').pop() || 'LLM'}]
     L --> S[Stream SSE]
-    
+
     style Q fill:#f1f5f9,stroke:#64748b
+    style QE fill:#fef3c7,stroke:#f59e0b
     style V fill:#ede9fe,stroke:#8b5cf6
     style F fill:#e0e7ff,stroke:#6366f1
     style R fill:#ccfbf1,stroke:#14b8a6
+    style TR fill:#fce7f3,stroke:#ec4899
     style L fill:#fef3c7,stroke:#d97706
     style S fill:#dcfce7,stroke:#16a34a`} />
               </div>
 
-              {/* Explanation */}
-              <div className="grid grid-cols-3 gap-4">
-                <div className="bg-violet-50 rounded-lg p-4 border border-violet-200">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-5 h-5 rounded-full bg-violet-600 text-white text-xs flex items-center justify-center font-medium">1</div>
-                    <h4 className="font-medium text-slate-800 text-sm">Vector Search</h4>
+              {/* Explanation - 5 steps now */}
+              <div className="grid grid-cols-5 gap-3">
+                <div className="bg-amber-50 rounded-lg p-3 border border-amber-200">
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <div className="w-4 h-4 rounded-full bg-amber-600 text-white text-[10px] flex items-center justify-center font-medium">1</div>
+                    <h4 className="font-medium text-slate-800 text-xs">Query Expansion</h4>
                   </div>
-                  <p className="text-sm text-slate-600">
-                    Cosine similarity on OpenAI embeddings ({config?.embeddings.dimensions || 1536}D). Finds semantically similar chunks.
+                  <p className="text-xs text-slate-600">
+                    {config?.retrieval?.query_expansion_enabled ? (
+                      <>LLM adds domain synonyms via <span className="font-mono text-[10px]">{config.retrieval.query_expansion_model}</span></>
+                    ) : (
+                      <span className="text-slate-400">Disabled</span>
+                    )}
                   </p>
                 </div>
-                
-                <div className="bg-indigo-50 rounded-lg p-4 border border-indigo-200">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-5 h-5 rounded-full bg-indigo-600 text-white text-xs flex items-center justify-center font-medium">2</div>
-                    <h4 className="font-medium text-slate-800 text-sm">Full-Text Search</h4>
+
+                <div className="bg-violet-50 rounded-lg p-3 border border-violet-200">
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <div className="w-4 h-4 rounded-full bg-violet-600 text-white text-[10px] flex items-center justify-center font-medium">2</div>
+                    <h4 className="font-medium text-slate-800 text-xs">Vector Search</h4>
                   </div>
-                  <p className="text-sm text-slate-600">
-                    PostgreSQL FTS with French stemming. Captures exact keyword matches.
+                  <p className="text-xs text-slate-600">
+                    Cosine similarity on {config?.embeddings.dimensions || 1536}D embeddings.
                   </p>
                 </div>
-                
-                <div className="bg-teal-50 rounded-lg p-4 border border-teal-200">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-5 h-5 rounded-full bg-teal-600 text-white text-xs flex items-center justify-center font-medium">3</div>
-                    <h4 className="font-medium text-slate-800 text-sm">RRF Fusion</h4>
+
+                <div className="bg-indigo-50 rounded-lg p-3 border border-indigo-200">
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <div className="w-4 h-4 rounded-full bg-indigo-600 text-white text-[10px] flex items-center justify-center font-medium">3</div>
+                    <h4 className="font-medium text-slate-800 text-xs">French FTS</h4>
                   </div>
-                  <p className="text-sm text-slate-600">
-                    Reciprocal Rank Fusion merges both rankings. Better recall than either method alone.
+                  <p className="text-xs text-slate-600">
+                    PostgreSQL with French stemming for exact matches.
                   </p>
+                </div>
+
+                <div className="bg-teal-50 rounded-lg p-3 border border-teal-200">
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <div className="w-4 h-4 rounded-full bg-teal-600 text-white text-[10px] flex items-center justify-center font-medium">4</div>
+                    <h4 className="font-medium text-slate-800 text-xs">RRF Fusion</h4>
+                  </div>
+                  <p className="text-xs text-slate-600">
+                    Merges rankings with k={config?.retrieval?.rrf_k || 60}.
+                  </p>
+                </div>
+
+                <div className="bg-pink-50 rounded-lg p-3 border border-pink-200">
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <div className="w-4 h-4 rounded-full bg-pink-600 text-white text-[10px] flex items-center justify-center font-medium">5</div>
+                    <h4 className="font-medium text-slate-800 text-xs">Title Rerank</h4>
+                  </div>
+                  <p className="text-xs text-slate-600">
+                    {config?.retrieval?.title_rerank_enabled ? (
+                      <>Boosts matching titles +{((config.retrieval.title_rerank_boost || 0.15) * 100).toFixed(0)}%</>
+                    ) : (
+                      <span className="text-slate-400">Disabled</span>
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              {/* Best practices callout */}
+              <div className="bg-linear-to-r from-amber-50 to-pink-50 rounded-lg p-4 border border-amber-200">
+                <div className="flex items-start gap-3">
+                  <Sparkles className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <h4 className="font-medium text-slate-800 text-sm mb-1">RAG Best Practices 2024</h4>
+                    <p className="text-xs text-slate-600">
+                      <strong>Query Expansion</strong> improves recall by adding domain synonyms (vocabulary mismatch fix).
+                      <strong> Title Reranking</strong> improves precision by boosting documents whose titles match query keywords.
+                      Combined with RRF hybrid search, this pipeline maximizes both recall and precision.
+                    </p>
+                  </div>
                 </div>
               </div>
 
@@ -403,7 +458,7 @@ export default function SystemPage() {
                   <div>
                     <span className="text-sm text-slate-600">Reciprocal Rank Fusion:</span>
                     <code className="ml-2 text-sm font-mono text-slate-800">RRF(d) = Σ 1/(k + rank)</code>
-                    <span className="ml-2 text-xs text-slate-500">k=60</span>
+                    <span className="ml-2 text-xs text-slate-500">k={config?.retrieval?.rrf_k || 60}</span>
                   </div>
                   <span className="text-xs text-slate-500">Documents ranked high in both methods surface first</span>
                 </div>

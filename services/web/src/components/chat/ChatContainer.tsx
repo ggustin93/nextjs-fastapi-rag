@@ -87,11 +87,22 @@ export function ChatContainer({ onOpenDocument }: ChatContainerProps) {
             </div>
           ) : (
             <div className="space-y-3">
-              {messages.map((message, index) => (
-                <div key={index} className="animate-in slide-in-from-bottom-2 fade-in duration-300">
-                  <ChatMessage message={message} onOpenDocument={onOpenDocument} />
-                </div>
-              ))}
+              {messages.map((message, index) => {
+                // Don't render empty assistant message while loading (shows only Thinking indicator)
+                const isEmptyAssistantWhileLoading =
+                  isLoading &&
+                  message.role === 'assistant' &&
+                  !message.content &&
+                  index === messages.length - 1;
+
+                if (isEmptyAssistantWhileLoading) return null;
+
+                return (
+                  <div key={index} className="animate-in slide-in-from-bottom-2 fade-in duration-300">
+                    <ChatMessage message={message} onOpenDocument={onOpenDocument} />
+                  </div>
+                );
+              })}
               {isLoading && (
                 <div className="animate-in fade-in duration-300">
                   <ToolActivityIndicator isActive={isLoading} currentTool={currentTool || undefined} />
