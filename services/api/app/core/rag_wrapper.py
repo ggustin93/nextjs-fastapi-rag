@@ -18,12 +18,12 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import AsyncGenerator, Optional
 
-# Timeout for agent streaming (prevents indefinite hangs)
-STREAM_TIMEOUT_SECONDS = 60
-
 from packages.config import settings
 from packages.core.agent import get_last_sources
 from packages.core.factory import create_rag_agent
+
+# Timeout for agent streaming (prevents indefinite hangs)
+STREAM_TIMEOUT_SECONDS = 60
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 def _get_app_state():
     """Get singleton app state (lazy import to avoid circular imports)."""
     from app.main import app_state
+
     return app_state
 
 
@@ -60,6 +61,7 @@ def extract_cited_indices(response_text: str) -> set[int]:
 # For multi-server deployments, migrate to Redis or database
 _message_histories: dict = defaultdict(list)
 _session_timestamps: dict[str, datetime] = {}
+_session_models: dict[str, str] = {}  # Track model per session to detect switches
 SESSION_TTL_HOURS = 1  # Clean up inactive sessions after 1 hour
 
 
@@ -78,24 +80,42 @@ async def _cleanup_old_sessions():
         for sid in expired:
             _message_histories.pop(sid, None)
             _session_timestamps.pop(sid, None)
+            _session_models.pop(sid, None)
 
 
-def get_message_history(session_id: str) -> list:
-    """Get message history for a session (excludes system prompt)."""
+def get_message_history(session_id: str, model: str | None = None) -> list:
+    """Get message history for a session (excludes system prompt).
+
+    If model differs from session's previous model, returns empty history
+    to avoid tool_call_id format incompatibilities between providers.
+    """
+    if model and session_id in _session_models:
+        previous_model = _session_models[session_id]
+        if previous_model != model:
+            logger.info(f"🔄 Model switch detected ({previous_model} → {model}), clearing history")
+            _message_histories.pop(session_id, None)
+            return []
     return _message_histories.get(session_id, [])
 
 
-async def update_message_history(session_id: str, messages: list):
-    """Update message history with new messages (excluding system prompt).
+async def update_message_history_with_model(
+    session_id: str, messages: list, model: str | None = None
+):
+    """Update message history with new messages and track the model used.
 
     Stores only user/assistant messages for conversation continuity.
     The agent adds its own system prompt on each run.
+    Also tracks the model used to detect model switches.
     """
     await _cleanup_old_sessions()
-    
+
+    # Track the model used for this session
+    if model:
+        _session_models[session_id] = model
+
     # Filter out system prompt messages - agent adds its own
     from pydantic_ai.messages import ModelRequest, SystemPromptPart
-    
+
     filtered = []
     for msg in messages:
         if isinstance(msg, ModelRequest):
@@ -105,7 +125,7 @@ async def update_message_history(session_id: str, messages: list):
                 filtered.append(ModelRequest(parts=non_system_parts))
         else:
             filtered.append(msg)
-    
+
     _message_histories[session_id] = filtered
     _session_timestamps[session_id] = datetime.now()
 
@@ -138,6 +158,7 @@ async def stream_agent_response(
         logger.info("RAG context initialized with shared singleton resources")
 
         # Use singleton agent or create new agent with model override
+        effective_model = model if model else settings.llm.model
         if model and model != settings.llm.model:
             logger.info(f"Using model override: {model}")
             rag_agent = create_rag_agent(model=model)
@@ -145,9 +166,10 @@ async def stream_agent_response(
             rag_agent = app_state.agent
 
         # Get existing message history for this session
+        # Pass model to detect model switches and clear incompatible history
         message_history = []
         if session_id:
-            message_history = get_message_history(session_id)
+            message_history = get_message_history(session_id, model=effective_model)
 
         logger.info(f"🚀 Agent run: '{message[:50]}...' (history: {len(message_history)} msgs)")
 
@@ -160,17 +182,25 @@ async def stream_agent_response(
                 async for text in result.stream_text(delta=True):
                     yield {"type": "token", "content": text}
 
-                # Update message history with the new messages
+                # Update message history with the new messages and track model
                 if session_id:
-                    await update_message_history(session_id, result.all_messages())
+                    await update_message_history_with_model(
+                        session_id, result.all_messages(), model=effective_model
+                    )
 
                 # Detect tool calls from message kinds
                 all_messages = result.all_messages()
-                tool_calls = [m for m in all_messages if getattr(m, "kind", None) == "request-tool-call"]
-                tool_responses = [m for m in all_messages if getattr(m, "kind", None) == "response-tool-return"]
+                tool_calls = [
+                    m for m in all_messages if getattr(m, "kind", None) == "request-tool-call"
+                ]
+                tool_responses = [
+                    m for m in all_messages if getattr(m, "kind", None) == "response-tool-return"
+                ]
 
                 if tool_calls:
-                    logger.info(f"🔧 Tool calls: {len(tool_calls)}, responses: {len(tool_responses)}")
+                    logger.info(
+                        f"🔧 Tool calls: {len(tool_calls)}, responses: {len(tool_responses)}"
+                    )
 
                 if tool_calls and tool_responses:
                     for tool_call, tool_response in zip(tool_calls, tool_responses):
@@ -179,7 +209,7 @@ async def stream_agent_response(
                             tool_args = {}
                             if hasattr(tool_call, "args") and tool_call.args:
                                 if hasattr(tool_call.args, "model_dump"):
-                                    tool_args = tool_call.args.model_dump(mode='json')
+                                    tool_args = tool_call.args.model_dump(mode="json")
                                 elif isinstance(tool_call.args, dict):
                                     tool_args = tool_call.args
 
