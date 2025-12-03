@@ -60,7 +60,7 @@ ingest: ## Ingest documents into vector DB
 	@uv run python -m packages.ingestion.ingest --documents data/raw/pdfs/ || echo "⚠️  No PDFs found or ingestion failed"
 	@echo ""
 	@echo "🌐 [2/2] Ingesting scraped web content from data/processed/scraped/..."
-	@uv run python -m packages.ingestion.ingest --documents data/processed/scraped/ || echo "⚠️  No scraped content found or ingestion failed"
+	@uv run python -m packages.ingestion.ingest --documents data/processed/scraped/ --no-clean || echo "⚠️  No scraped content found or ingestion failed"
 	@echo ""
 	@echo "✅ Document ingestion complete!"
 	@echo "════════════════════════════════════════════════════════════"
