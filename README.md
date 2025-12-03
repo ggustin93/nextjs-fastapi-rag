@@ -1,6 +1,6 @@
 # nextjs-fastapi-rag
 
-A production-ready, domain-agnostic RAG (Retrieval-Augmented Generation) system for building document-based Q&A applications. Clean architecture with optional domain customization and external API integration.
+A domain-agnostic RAG (Retrieval-Augmented Generation) starter for building document-based Q&A applications. Clean architecture with optional domain customization.
 
 ## Table of Contents
 
@@ -188,9 +188,6 @@ uv pip install -e .
 pip install -e .
 ```
 
-> ⚠️ **Note**: Do NOT create a venv inside `services/api/`. The root `.venv` is used everywhere.
-> Docker builds use `pyproject.toml` directly without a venv.
-
 ### 5.3 Quick Start
 
 ```bash
@@ -307,8 +304,6 @@ MAX_CHUNKS_PER_DOCUMENT=5           # Limit per source document
 RRF_K=50                            # RRF ranking parameter
 EXCLUDE_TOC=true                    # Filter out TOC chunks
 ```
-
-> **Troubleshooting:** For retrieval quality issues, see [docs/TROUBLESHOOT.md](docs/TROUBLESHOOT.md).
 
 ## 9. Customization
 
