@@ -24,7 +24,10 @@ load_dotenv()
 import os  # noqa: E402
 from dataclasses import dataclass, field  # noqa: E402
 from functools import lru_cache  # noqa: E402
+from pathlib import Path  # noqa: E402
 from typing import List, Optional, Union  # noqa: E402
+
+from packages.utils.prompt_loader import load_prompt  # noqa: E402
 
 
 def _get_clean_env(key: str, default: Optional[str] = None) -> Optional[str]:
@@ -67,111 +70,42 @@ def _get_clean_env(key: str, default: Optional[str] = None) -> Optional[str]:
 
     return value
 
-# Default RAG system prompt (can be overridden via RAG_SYSTEM_PROMPT env var)
-DEFAULT_SYSTEM_PROMPT = """Tu es un assistant intelligent SPÉCIALISÉ dans la base de connaissances de l'organisation.
-Ton rôle est d'aider les utilisateurs à trouver des informations précises et factuelles UNIQUEMENT à partir de cette base.
 
-═══════════════════════════════════════════════════════════
-RÈGLE FONDAMENTALE: PÉRIMÈTRE STRICT
-═══════════════════════════════════════════════════════════
-Tu réponds UNIQUEMENT aux questions dont les réponses se trouvent dans la base de connaissances.
-Tu n'es PAS un assistant généraliste - tu es un expert de la documentation interne.
+# Minimal fallback system prompt (full prompt loaded from data/prompts/system_prompt.txt)
+# This is only used if no custom prompt file is found
+DEFAULT_SYSTEM_PROMPT_FALLBACK = """You are a knowledge base assistant.
 
-SI la question est HORS PÉRIMÈTRE (Django, Python, code, recettes, etc.):
-→ Refuse poliment et explique ton rôle
+You answer questions ONLY from your organization's knowledge base.
+You are NOT a general assistant.
 
-RÉPONSE TYPE POUR QUESTIONS HORS PÉRIMÈTRE:
-"Je suis un assistant spécialisé dans la base de connaissances de l'organisation.
-Je ne peux pas vous aider avec [sujet demandé] car cela ne fait pas partie de ma documentation.
-Posez-moi plutôt des questions sur [sujets couverts par votre KB - ex: chantiers, permis, réglementations]."
+AVAILABLE TOOLS:
+1. search_knowledge_base: Search the knowledge base
 
-═══════════════════════════════════════════════════════════
-OUTILS DISPONIBLES:
-═══════════════════════════════════════════════════════════
-1. search_knowledge_base: Recherche dans la base de connaissances
-2. get_weather: Obtient la météo actuelle et prévisionnelle pour une ville/lieu
+RULES:
+- Always call search_knowledge_base before answering
+- Only use information from the search results
+- Cite sources with [1], [2], etc.
+- If no relevant results, politely refuse
 
-QUAND UTILISER get_weather:
-- L'utilisateur mentionne "météo", "temps", "température", "prévisions"
-- L'utilisateur cite un lieu géographique (ville, code postal, pays)
-- L'utilisateur pose une question sur les conditions climatiques
+For detailed customization, create: data/prompts/system_prompt.txt"""
 
-EXEMPLES:
-❓ "Quel temps fait-il à Bruxelles ?" → APPELER get_weather(location="Bruxelles")
-❓ "Météo pour le code postal 1000" → APPELER get_weather(location="1000, Belgique")
-❓ "Température à Paris aujourd'hui" → APPELER get_weather(location="Paris")
 
-═══════════════════════════════════════════════════════════
-RÈGLE ABSOLUE #1: TOUJOURS APPELER L'OUTIL APPROPRIÉ
-═══════════════════════════════════════════════════════════
-- Pour questions sur la base de connaissances → search_knowledge_base
-- Pour questions météo → get_weather
-JAMAIS répondre sans avoir d'abord utilisé le bon outil.
+def _load_system_prompt() -> str:
+    """Load system prompt from file with fallback.
 
-═══════════════════════════════════════════════════════════
-RÈGLE ABSOLUE #2: INTERPRÉTER LES RÉSULTATS CORRECTEMENT
-═══════════════════════════════════════════════════════════
-Quand l'outil search_knowledge_base retourne :
-
-"Trouvé X résultats pertinents (triés par pertinence):
-
-[1] Source: "document" (Pertinence: XX%)
-{CONTENU DU CHUNK ICI}
----
-[2] Source: "document" (Pertinence: XX%)
-{CONTENU DU CHUNK ICI}"
-
-ANALYSE LA PERTINENCE:
-- Si Pertinence > 50% ET contenu répond à la question → Utilise les résultats
-- Si Pertinence < 40% OU contenu ne répond pas → Question probablement HORS PÉRIMÈTRE
-
-Tu DOIS:
-1. RECONNAÎTRE que tu as reçu des résultats (le texte commence par "Trouvé X résultats")
-2. VÉRIFIER si le contenu répond réellement à la question (pas juste des mots-clés)
-3. Si OUI: EXTRAIRE les informations et CITER les sources [1], [2]
-4. Si NON: Expliquer que la question est hors périmètre de la base
-
-INTERDICTION ABSOLUE:
-❌ Ne JAMAIS utiliser tes connaissances générales pour répondre
-❌ Ne JAMAIS inventer une réponse si la base ne contient pas l'information
-❌ Ne JAMAIS répondre à des questions de programmation, code, tutoriels généraux
-
-SI L'OUTIL RETOURNE "Aucune information pertinente trouvée":
-→ Refuse poliment: "Cette question ne fait pas partie de ma base de connaissances."
-
-SI L'OUTIL RETOURNE "Trouvé X résultats" MAIS contenu non pertinent:
-→ Refuse poliment: "Bien que j'aie trouvé des documents, ils ne répondent pas à votre question sur [sujet]. Cette question semble être hors du périmètre de ma base de connaissances."
-
-SI L'OUTIL RETOURNE des résultats pertinents (>50%):
-→ Tu DOIS utiliser le contenu pour répondre
-
-EXEMPLE CORRECT - Question dans le périmètre:
-Utilisateur: "C'est quoi un chantier de type D?"
-Outil retourne: "Trouvé 2 résultats... [1] Source: Guide (Pertinence: 73%) Un chantier de type D..."
-Ta réponse: "D'après les sources [1][2], un chantier de type D est..."
-
-EXEMPLE CORRECT - Question HORS périmètre:
-Utilisateur: "Aide moi à créer un code Django"
-Outil retourne: "Aucune information pertinente..." OU résultats non pertinents
-Ta réponse: "Je suis un assistant spécialisé dans la documentation de l'organisation. Je ne peux pas vous aider avec la programmation Django car cela ne fait pas partie de ma base de connaissances. Posez-moi plutôt des questions sur les chantiers, permis ou réglementations."
-
-═══════════════════════════════════════════════════════════
-INSTRUCTIONS D'EXTRACTION (si résultats pertinents):
-═══════════════════════════════════════════════════════════
-1. Priorise les sources avec Pertinence > 70% (très fiables)
-2. Utilise les sources 50-70% avec prudence (mentionner la pertinence)
-3. Synthétise les informations de plusieurs chunks
-4. Cite toujours les sources utilisées [1], [2], etc.
-5. Si incomplet, mentionne ce qui manque et suggère de préciser la question
-
-STYLE DE RÉPONSE:
-- Précis et factuel, basé sur le contenu trouvé
-- Utilise des listes et structure claire
-- Réponds en français
-- Cite tes sources entre crochets [1], [2]
-
-RAPPEL FINAL: Tu es un SPÉCIALISTE de la base de connaissances, pas un assistant généraliste.
-Si la réponse n'est pas dans la base → refuse poliment et explique ton périmètre."""
+    Search order:
+    1. RAG_SYSTEM_PROMPT env var (full content)
+    2. RAG_SYSTEM_PROMPT_FILE env var (file path)
+    3. data/prompts/system_prompt.txt (default location)
+    4. Built-in minimal fallback
+    """
+    return load_prompt(
+        default_prompt=DEFAULT_SYSTEM_PROMPT_FALLBACK,
+        prompt_name="system_prompt",
+        env_var_content="RAG_SYSTEM_PROMPT",
+        env_var_file="RAG_SYSTEM_PROMPT_FILE",
+        default_path=Path("data/prompts/system_prompt.txt"),
+    )
 
 
 @dataclass(frozen=True)
@@ -204,9 +138,7 @@ class LLMConfig:
     api_key: Optional[str] = field(
         default_factory=lambda: _get_clean_env("LLM_API_KEY") or _get_clean_env("OPENAI_API_KEY")
     )
-    system_prompt: str = field(
-        default_factory=lambda: os.getenv("RAG_SYSTEM_PROMPT", DEFAULT_SYSTEM_PROMPT)
-    )
+    system_prompt: str = field(default_factory=_load_system_prompt)
 
     @property
     def model_identifier(self) -> str:
@@ -343,9 +275,15 @@ class SearchConfig:
         MAX_CHUNKS_PER_DOCUMENT: Maximum chunks to retrieve per document (default: 5)
         RRF_K: Reciprocal Rank Fusion k parameter (default: 50, lower = more weight to top results)
         EXCLUDE_TOC: Exclude Table of Contents chunks from search (default: true)
+        TITLE_RERANK_ENABLED: Enable title-based re-ranking (default: true)
+        TITLE_RERANK_BOOST: Max boost factor for title matches (default: 0.15)
+        TITLE_RERANK_CLASSIFIERS: Comma-separated classifiers for keyword extraction (default: "type,classe,categorie,niveau,phase,etape,version")
+        QUERY_EXPANSION_ENABLED: Enable LLM-based query expansion for vocabulary mismatch (default: true)
 
     Note: Reranking and query reformulation were removed after testing showed
     they hurt accuracy for French technical content. See docs/TROUBLESHOOT.md.
+    Title-based re-ranking is different - it boosts documents whose titles match query keywords.
+    Query expansion uses a fast LLM call to add domain-specific synonyms before search.
     """
 
     default_limit: int = field(default_factory=lambda: int(os.getenv("SEARCH_DEFAULT_LIMIT", "30")))
@@ -366,6 +304,25 @@ class SearchConfig:
     rrf_k: int = field(default_factory=lambda: int(os.getenv("RRF_K", "50")))
     exclude_toc: bool = field(
         default_factory=lambda: os.getenv("EXCLUDE_TOC", "true").lower() == "true"
+    )
+    # Title-based re-ranking configuration
+    title_rerank_enabled: bool = field(
+        default_factory=lambda: os.getenv("TITLE_RERANK_ENABLED", "true").lower() == "true"
+    )
+    title_rerank_boost: float = field(
+        default_factory=lambda: float(os.getenv("TITLE_RERANK_BOOST", "0.15"))
+    )
+    title_rerank_classifiers: List[str] = field(
+        default_factory=lambda: os.getenv(
+            "TITLE_RERANK_CLASSIFIERS", "type,classe,categorie,niveau,phase,etape,version"
+        ).split(",")
+    )
+    # Query expansion - uses LLM to add synonyms for vocabulary mismatch
+    query_expansion_enabled: bool = field(
+        default_factory=lambda: os.getenv("QUERY_EXPANSION_ENABLED", "true").lower() == "true"
+    )
+    query_expansion_model: str = field(
+        default_factory=lambda: os.getenv("QUERY_EXPANSION_MODEL", "gpt-4o-mini")
     )
 
 

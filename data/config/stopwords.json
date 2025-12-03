@@ -1,0 +1,6 @@
+{
+  "default": ["quoi", "quel", "quelle", "quels", "quelles", "est", "sont", "une", "des", "les", "pour", "dans", "avec", "que", "qui", "comment", "pourquoi"],
+  "fr": ["quoi", "quel", "quelle", "quels", "quelles", "est", "sont", "une", "des", "les", "pour", "dans", "avec", "que", "qui", "comment", "pourquoi", "cette", "tout", "tous", "etre", "avoir", "faire", "peut", "plus", "moins", "tres", "bien", "aussi"],
+  "en": ["what", "which", "is", "are", "the", "for", "in", "with", "that", "who", "how", "why", "this", "all", "be", "have", "do", "can", "more", "less", "very", "well", "also", "from", "about", "when", "where"],
+  "nl": ["wat", "welke", "is", "zijn", "de", "het", "voor", "in", "met", "dat", "wie", "hoe", "waarom", "dit", "alle", "zijn", "hebben", "doen", "kan", "meer", "minder", "zeer", "goed", "ook", "van", "over", "wanneer", "waar"]
+}
