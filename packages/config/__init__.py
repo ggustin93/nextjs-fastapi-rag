@@ -26,6 +26,47 @@ from dataclasses import dataclass, field  # noqa: E402
 from functools import lru_cache  # noqa: E402
 from typing import List, Optional, Union  # noqa: E402
 
+
+def _get_clean_env(key: str, default: Optional[str] = None) -> Optional[str]:
+    """Get environment variable with validation and comment stripping.
+
+    Handles common .env file issues:
+    - Strips whitespace
+    - Treats comment-only values as None
+    - Validates no invalid characters like '#' in actual values
+
+    Args:
+        key: Environment variable name
+        default: Default value if not found or invalid
+
+    Returns:
+        Cleaned value or default
+    """
+    value = os.getenv(key)
+
+    if not value:
+        return default
+
+    # Strip whitespace
+    value = value.strip()
+
+    # Treat empty or comment-only values as None
+    if not value or value.startswith("#"):
+        return default
+
+    # Validate no inline comments (invalid API keys)
+    if "#" in value:
+        # Log warning but return default instead of failing
+        import logging
+
+        logging.warning(
+            f"Environment variable {key} contains '#' - likely malformed comment. "
+            f"Using default value. Check your .env file."
+        )
+        return default
+
+    return value
+
 # Default RAG system prompt (can be overridden via RAG_SYSTEM_PROMPT env var)
 DEFAULT_SYSTEM_PROMPT = """Tu es un assistant intelligent SPÉCIALISÉ dans la base de connaissances de l'organisation.
 Ton rôle est d'aider les utilisateurs à trouver des informations précises et factuelles UNIQUEMENT à partir de cette base.
@@ -161,7 +202,7 @@ class LLMConfig:
     )
     base_url: Optional[str] = field(default_factory=lambda: os.getenv("LLM_BASE_URL"))
     api_key: Optional[str] = field(
-        default_factory=lambda: os.getenv("LLM_API_KEY", os.getenv("OPENAI_API_KEY"))
+        default_factory=lambda: _get_clean_env("LLM_API_KEY") or _get_clean_env("OPENAI_API_KEY")
     )
     system_prompt: str = field(
         default_factory=lambda: os.getenv("RAG_SYSTEM_PROMPT", DEFAULT_SYSTEM_PROMPT)
@@ -231,8 +272,10 @@ class EmbeddingConfig:
     )
     base_url: Optional[str] = field(default_factory=lambda: os.getenv("EMBEDDING_BASE_URL"))
     api_key: Optional[str] = field(
-        default_factory=lambda: os.getenv(
-            "EMBEDDING_API_KEY", os.getenv("LLM_API_KEY", os.getenv("OPENAI_API_KEY"))
+        default_factory=lambda: (
+            _get_clean_env("EMBEDDING_API_KEY")
+            or _get_clean_env("LLM_API_KEY")
+            or _get_clean_env("OPENAI_API_KEY")
         )
     )
     batch_size: int = field(default_factory=lambda: int(os.getenv("EMBEDDING_BATCH_SIZE", "100")))

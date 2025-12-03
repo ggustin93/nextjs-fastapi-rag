@@ -12,7 +12,6 @@ import logging
 from dotenv import load_dotenv
 
 from packages.config import settings
-from packages.core.factory import create_rag_agent
 from packages.core.types import RAGContext
 from packages.utils.supabase_client import SupabaseRestClient
 
@@ -68,8 +67,7 @@ def get_last_sources(context: RAGContext) -> list:
     return sources
 
 
-# Create the PydanticAI agent using factory for consistent configuration
-# Uses settings.llm.create_model() to support OpenAI, Chutes.ai, Ollama, or any OpenAI-compatible API
-# System prompt is configurable via RAG_SYSTEM_PROMPT environment variable (see packages/config)
-# Tools are configurable via ENABLED_TOOLS environment variable
-agent = create_rag_agent()
+# Note: Module-level agent removed in favor of singleton pattern.
+# The FastAPI app uses app_state.agent (initialized once in lifespan).
+# For CLI usage, call create_rag_agent() directly or use create_rag_context().
+# See: services/api/app/main.py for singleton initialization.

@@ -1,19 +1,37 @@
-"""Simplified wrapper that uses the existing RAG agent."""
+"""Simplified wrapper that uses singleton RAG agent from application state.
 
+This module provides the streaming interface for RAG responses, using
+shared resources managed by FastAPI's lifespan to prevent connection
+pool exhaustion.
+
+Architecture:
+- Singleton agent: Reused across all requests (stateless)
+- Singleton db_client: Shared connection pool
+- Singleton embedder: Shared OpenAI client
+- Per-request RAGContext: Wraps singletons with request-specific mutable state
+"""
+
+import asyncio
 import logging
 import re
 from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import AsyncGenerator, Optional
 
+# Timeout for agent streaming (prevents indefinite hangs)
+STREAM_TIMEOUT_SECONDS = 60
+
 from packages.config import settings
-from packages.core.agent import (
-    create_rag_context,
-    get_last_sources,
-)
+from packages.core.agent import get_last_sources
 from packages.core.factory import create_rag_agent
 
 logger = logging.getLogger(__name__)
+
+
+def _get_app_state():
+    """Get singleton app state (lazy import to avoid circular imports)."""
+    from app.main import app_state
+    return app_state
 
 
 def extract_cited_indices(response_text: str) -> set[int]:
@@ -63,23 +81,37 @@ async def _cleanup_old_sessions():
 
 
 def get_message_history(session_id: str) -> list:
-    """Get message history for a session."""
+    """Get message history for a session (excludes system prompt)."""
     return _message_histories.get(session_id, [])
 
 
 async def update_message_history(session_id: str, messages: list):
-    """Update message history and refresh session timestamp.
+    """Update message history with new messages (excluding system prompt).
 
-    Also triggers cleanup of expired sessions on every update (passive cleanup).
-    This prevents unbounded memory growth in long-running deployments.
+    Stores only user/assistant messages for conversation continuity.
+    The agent adds its own system prompt on each run.
     """
-    await _cleanup_old_sessions()  # Cleanup on every access (passive)
-    _message_histories[session_id] = messages
+    await _cleanup_old_sessions()
+    
+    # Filter out system prompt messages - agent adds its own
+    from pydantic_ai.messages import ModelRequest, SystemPromptPart
+    
+    filtered = []
+    for msg in messages:
+        if isinstance(msg, ModelRequest):
+            # Remove SystemPromptPart from requests, keep user parts
+            non_system_parts = [p for p in msg.parts if not isinstance(p, SystemPromptPart)]
+            if non_system_parts:
+                filtered.append(ModelRequest(parts=non_system_parts))
+        else:
+            filtered.append(msg)
+    
+    _message_histories[session_id] = filtered
     _session_timestamps[session_id] = datetime.now()
 
 
 async def stream_agent_response(
-    message: str, session_id: Optional[str] = None
+    message: str, session_id: Optional[str] = None, model: Optional[str] = None
 ) -> AsyncGenerator[dict, None]:
     """
     Stream agent responses using the RAG agent with dependency injection.
@@ -90,115 +122,92 @@ async def stream_agent_response(
     Args:
         message: User's message/query
         session_id: Optional session ID for conversation history
+        model: Optional LLM model override (creates new agent if different from default)
 
     Yields:
         dict: Event data with type and content
     """
     try:
-        # Create RAG context with all dependencies (db_client, embedder)
-        rag_context = await create_rag_context()
+        # Get singleton app state (shared agent, db_client, embedder)
+        app_state = _get_app_state()
 
-        logger.info("RAG context initialized with dependency injection")
+        # Create per-request RAGContext using shared singleton resources
+        # The context wraps shared resources but has per-request mutable state
+        rag_context = app_state.create_rag_context()
 
-        # Create agent using factory - Uses settings.llm.model from .env
-        # Default LLM_MODEL=gpt-4.1-mini (NOT hardcoded "openai:gpt-4o")
-        # Tools are configurable via ENABLED_TOOLS environment variable (default: all tools)
-        rag_agent = create_rag_agent()
+        logger.info("RAG context initialized with shared singleton resources")
 
-        logger.info(f"Agent created with model: {settings.llm.model}")
+        # Use singleton agent or create new agent with model override
+        if model and model != settings.llm.model:
+            logger.info(f"Using model override: {model}")
+            rag_agent = create_rag_agent(model=model)
+        else:
+            rag_agent = app_state.agent
 
         # Get existing message history for this session
         message_history = []
         if session_id:
             message_history = get_message_history(session_id)
 
-        logger.info(f"🚀 Starting agent run for message: {message[:100]}...")
-        logger.info(f"📝 Message history length: {len(message_history)}")
+        logger.info(f"🚀 Agent run: '{message[:50]}...' (history: {len(message_history)} msgs)")
 
         # Run agent with streaming and message history
-        async with rag_agent.run_stream(
-            message, message_history=message_history, deps=rag_context
-        ) as result:
-            # Stream tokens as they arrive
-            async for text in result.stream_text(delta=True):
-                yield {"type": "token", "content": text}
+        async with asyncio.timeout(STREAM_TIMEOUT_SECONDS):
+            async with rag_agent.run_stream(
+                message, message_history=message_history, deps=rag_context
+            ) as result:
+                # Stream tokens as they arrive
+                async for text in result.stream_text(delta=True):
+                    yield {"type": "token", "content": text}
 
-            # Update message history with the new messages
-            if session_id:
-                await update_message_history(session_id, result.all_messages())
+                # Update message history with the new messages
+                if session_id:
+                    await update_message_history(session_id, result.all_messages())
 
-            # Check message kinds to detect tool calling
-            all_messages = result.all_messages()
-            logger.info(f"💬 Total messages in conversation: {len(all_messages)}")
+                # Detect tool calls from message kinds
+                all_messages = result.all_messages()
+                tool_calls = [m for m in all_messages if getattr(m, "kind", None) == "request-tool-call"]
+                tool_responses = [m for m in all_messages if getattr(m, "kind", None) == "response-tool-return"]
 
-            # DEBUG: Log all message kinds
-            for i, msg in enumerate(all_messages):
-                msg_kind = getattr(msg, "kind", "NO_KIND_ATTR")
-                msg_type = type(msg).__name__
-                logger.info(f"  Message {i}: type={msg_type}, kind={msg_kind}")
+                if tool_calls:
+                    logger.info(f"🔧 Tool calls: {len(tool_calls)}, responses: {len(tool_responses)}")
 
-            tool_calls = [
-                msg
-                for msg in all_messages
-                if hasattr(msg, "kind") and msg.kind == "request-tool-call"
-            ]
-            tool_responses = [
-                msg
-                for msg in all_messages
-                if hasattr(msg, "kind") and msg.kind == "response-tool-return"
-            ]
+                if tool_calls and tool_responses:
+                    for tool_call, tool_response in zip(tool_calls, tool_responses):
+                        try:
+                            tool_name = getattr(tool_call, "tool_name", "unknown")
+                            tool_args = {}
+                            if hasattr(tool_call, "args") and tool_call.args:
+                                if hasattr(tool_call.args, "model_dump"):
+                                    tool_args = tool_call.args.model_dump(mode='json')
+                                elif isinstance(tool_call.args, dict):
+                                    tool_args = tool_call.args
 
-            logger.info(f"🔧 Tool calls detected: {len(tool_calls)}")
-            logger.info(f"📥 Tool responses received: {len(tool_responses)}")
+                            yield {
+                                "type": "tool_call",
+                                "tool_name": tool_name,
+                                "tool_args": tool_args,
+                                "execution_time_ms": 150,
+                            }
+                        except Exception as tool_err:
+                            logger.error(f"Tool event error: {tool_err}")
 
-            # Emit tool_call events with metadata
-            if tool_calls and tool_responses:
-                for tool_call, tool_response in zip(tool_calls, tool_responses):
-                    tool_name = getattr(tool_call, "tool_name", "unknown")
+                # Extract cited source indices from complete response
+                final_text = await result.get_output()
+                cited_indices = extract_cited_indices(final_text)
+                rag_context.cited_source_indices = cited_indices
 
-                    # Extract tool arguments from the tool call message
-                    tool_args = {}
-                    if hasattr(tool_call, "args") and tool_call.args:
-                        # args is a ModelDump or dict containing the function arguments
-                        if hasattr(tool_call.args, "model_dump"):
-                            tool_args = tool_call.args.model_dump()
-                        elif isinstance(tool_call.args, dict):
-                            tool_args = tool_call.args
-
-                    logger.info(f"  ↳ Tool called: {tool_name} with args: {tool_args}")
-
-                    # Estimate execution time (use reasonable default)
-                    execution_time_ms = 150
-
-                    # Emit tool_call event with metadata
-                    yield {
-                        "type": "tool_call",
-                        "tool_name": tool_name,
-                        "tool_args": tool_args,
-                        "execution_time_ms": execution_time_ms,
-                    }
-
-            # Extract cited source indices from complete response
-            final_text = await result.get_output()  # Get complete response text
-            cited_indices = extract_cited_indices(final_text)
-            rag_context.cited_source_indices = cited_indices
-
-        # Get sources after streaming completes (pass context for dependency injection)
+        # Get sources after streaming completes
         sources = get_last_sources(rag_context)
-        logger.info(f"📚 Sources retrieved: {len(sources) if sources else 0}")
 
         if sources:
-            # Sort sources by similarity descending (defensive, should already be sorted)
             sorted_sources = sorted(sources, key=lambda s: s["similarity"], reverse=True)
-
-            logger.info(
-                f"✅ Returning {len(sorted_sources)} sources with {len(cited_indices)} cited indices to client"
-            )
+            logger.info(f"📚 Returning {len(sorted_sources)} sources")
             yield {
                 "type": "sources",
                 "content": "",
                 "sources": sorted_sources,
-                "cited_indices": list(cited_indices),  # Convert set to list for JSON
+                "cited_indices": list(cited_indices),
             }
         else:
             logger.warning("⚠️ No sources retrieved - tool may not have been called")
@@ -207,5 +216,7 @@ async def stream_agent_response(
         yield {"type": "done", "content": ""}
 
     except Exception as e:
-        # Send error event
+        # Bug 6 fix: Log exceptions for debugging (was silent before)
+        logger.error(f"❌ Stream error: {e}", exc_info=True)
+        # Send error event to frontend
         yield {"type": "error", "content": str(e)}

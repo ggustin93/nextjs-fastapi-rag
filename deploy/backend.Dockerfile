@@ -57,9 +57,10 @@ COPY --chown=appuser:appuser services/api/ ./services/api/
 RUN mkdir -p /app/data/raw /app/data/processed
 
 # Set environment variables
+# PYTHONPATH includes both /app (for packages/) and /app/services/api (for app module)
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONPATH=/app \
+    PYTHONPATH=/app:/app/services/api \
     PORT=8000
 
 # Switch to non-root user
@@ -72,5 +73,5 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
-# Run the application
+# Run the application from /app with full module path
 CMD ["uvicorn", "services.api.app.main:app", "--host", "0.0.0.0", "--port", "8000"]
