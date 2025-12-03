@@ -3,10 +3,18 @@
 import { useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Trash2, MessageSquare } from 'lucide-react';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { Trash2, MessageSquare, Settings } from 'lucide-react';
+import Link from 'next/link';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
 import { ToolActivityIndicator } from './ToolActivityIndicator';
+import { LLMSelector } from './LLMSelector';
 import { useChat } from '@/hooks/useChat';
 import type { Source } from '@/types/chat';
 
@@ -15,7 +23,7 @@ interface ChatContainerProps {
 }
 
 export function ChatContainer({ onOpenDocument }: ChatContainerProps) {
-  const { messages, isLoading, error, currentTool, sendMessage, clearMessages } = useChat();
+  const { messages, isLoading, error, currentTool, selectedModel, setSelectedModel, sendMessage, clearMessages } = useChat();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when new messages arrive
@@ -25,19 +33,38 @@ export function ChatContainer({ onOpenDocument }: ChatContainerProps) {
 
   return (
     <Card className="w-full h-full flex flex-col">
-      <CardHeader className="flex flex-row items-center justify-between flex-shrink-0">
+      <CardHeader className="flex flex-row items-center justify-between shrink-0">
         <CardTitle>Agent RAG Docling</CardTitle>
-        {messages.length > 0 && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={clearMessages}
-            disabled={isLoading}
-          >
-            <Trash2 className="h-4 w-4 mr-2" />
-            Effacer la conversation
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          <LLMSelector selectedModel={selectedModel} onSelectModel={setSelectedModel} disabled={isLoading} />
+          <Link href="/system">
+            <Button variant="ghost" size="sm">
+              <Settings className="h-4 w-4 mr-2" />
+              System
+            </Button>
+          </Link>
+          {messages.length > 0 && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={clearMessages}
+                    disabled={isLoading}
+                    className="h-9 w-9"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    <span className="sr-only">Effacer la conversation</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Effacer la conversation</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+        </div>
       </CardHeader>
 
       <CardContent className="flex-1 flex flex-col overflow-hidden p-0">
@@ -77,12 +104,12 @@ export function ChatContainer({ onOpenDocument }: ChatContainerProps) {
         </div>
 
         {error && (
-          <div className="bg-destructive/10 text-destructive px-6 py-2 text-sm flex-shrink-0">
+          <div className="bg-destructive/10 text-destructive px-6 py-2 text-sm shrink-0">
             {error}
           </div>
         )}
 
-        <div className="flex-shrink-0">
+        <div className="shrink-0">
           <ChatInput onSend={sendMessage} disabled={isLoading} />
         </div>
       </CardContent>

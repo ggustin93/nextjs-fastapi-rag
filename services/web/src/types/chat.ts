@@ -34,6 +34,7 @@ export interface ChatMessage {
 export interface ChatRequest {
   message: string;
   session_id?: string;
+  model?: string;
 }
 
 export interface StreamEvent {
