@@ -11,7 +11,7 @@ import remarkGfm from 'remark-gfm';
 /**
  * Filter and sort sources to show:
  * 1. All cited sources (from [1], [2], etc. in response)
- * 2. Top 5 sources by similarity (backend already sorted)
+ * 2. Top 10 sources by similarity (backend already sorted)
  * 3. Deduplicate by path, maintain similarity order
  *
  * Optimized: O(n) single-pass algorithm, leverages backend pre-sorting
@@ -24,7 +24,7 @@ function filterAndSortSources(
 
   const citedSet = new Set(citedIndices);
   const seenPaths = new Map<string, Source>();
-  const MAX_TOP_SOURCES = 5;
+  const MAX_TOP_SOURCES = 10;
 
   // Backend already sorts by similarity desc - maintain order
   // Single pass: add cited sources + top 5 unique sources

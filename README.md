@@ -2,6 +2,8 @@
 
 A domain-agnostic RAG (Retrieval-Augmented Generation) starter for building document-based Q&A applications. Clean architecture with optional domain customization.
 
+![Screenshot](docs/images/screenshot.png)
+
 ## Table of Contents
 
 1. [Features](#1-features)

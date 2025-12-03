@@ -115,34 +115,44 @@ export function DocumentViewer({ source, index, onOpenDocument }: DocumentViewer
 
   // --- Trigger Button ---
 
+  // Extract domain from URL
+  const getDomain = (url: string) => {
+    try {
+      return new URL(url).hostname.replace('www.', '');
+    } catch {
+      return url;
+    }
+  };
+
   const TriggerButton = (
     <Button
       variant="ghost"
       size="sm"
-      className="h-auto py-1 px-1.5 text-[11px] hover:bg-muted flex-col items-start"
+      className="h-auto py-1 px-1.5 text-[11px] hover:bg-muted w-full"
       onClick={() => isDesktop && onOpenDocument?.(source)}
     >
-      <div className="flex items-center w-full">
-        {index && <span className="font-mono text-muted-foreground mr-1 text-[10px]">[{index}]</span>}
-        <SourceTypeIcon source={source} />
-        <span className="truncate max-w-[200px]">{source.title}</span>
-        {source.page_range && <Badge variant="outline" className="ml-1 text-[9px] px-1 py-0">{source.page_range}</Badge>}
-        <Badge variant="secondary" className="ml-1 text-[9px] px-1 py-0">{Math.round(source.similarity * 100)}%</Badge>
+      <div className="flex items-center justify-between w-full gap-2">
+        <div className="flex items-center min-w-0">
+          {index && <span className="font-mono text-muted-foreground mr-1 text-[10px]">[{index}]</span>}
+          <SourceTypeIcon source={source} />
+          <span className="truncate max-w-[200px]">{source.title}</span>
+          {source.page_range && <Badge variant="outline" className="ml-1 text-[9px] px-1 py-0">{source.page_range}</Badge>}
+          <Badge variant="secondary" className="ml-1 text-[9px] px-1 py-0">{Math.round(source.similarity * 100)}%</Badge>
+        </div>
+        {source.url && (
+          <a
+            href={source.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors shrink-0"
+            title={source.url}
+          >
+            <span className="truncate max-w-[120px]">{getDomain(source.url)}</span>
+            <ExternalLink className="h-3 w-3 shrink-0" />
+          </a>
+        )}
       </div>
-
-      {source.url && (
-        <a
-          href={source.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={(e) => e.stopPropagation()}
-          className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground ml-5 mt-0.5 underline decoration-dotted underline-offset-2 transition-colors"
-          title={source.url}
-        >
-          <span>{formatCompactUrl(source.url)}</span>
-          <ExternalLink className="h-3 w-3" />
-        </a>
-      )}
     </Button>
   );
 
@@ -189,7 +199,7 @@ export function SourcesList({ sources, onOpenDocument }: SourcesListProps) {
       </button>
 
       {isExpanded && (
-        <div className="flex flex-wrap gap-1">
+        <div className="flex flex-col gap-1.5">
           {sources.map((source, i) => (
             <DocumentViewer key={i} source={source} index={i + 1} onOpenDocument={onOpenDocument} />
           ))}
