@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 from docling.chunking import HybridChunker
-from docling_core.types.doc import DoclingDocument
+from docling_core.types.doc import DocItemLabel, DoclingDocument
 from dotenv import load_dotenv
 from transformers import AutoTokenizer
 
@@ -63,14 +63,43 @@ class ChunkingConfig:
             raise ValueError("Minimum chunk size must be positive")
 
 
-# TOC detection patterns for French documents
-TOC_PATTERNS = [
-    r"^\s*table\s*(des\s*)?mati[èe]res?\s*$",  # "Table des matières"
-    r"^\s*sommaire\s*$",  # "Sommaire"
-    r"^\s*contents?\s*$",  # "Contents"
+# TOC element labels from Docling (primary detection)
+TOC_LABELS = {DocItemLabel.DOCUMENT_INDEX}
+
+# Fallback TOC detection patterns for French documents (when Docling labels unavailable)
+TOC_HEADER_PATTERNS = [
+    r"table\s*(des\s*)?mati[èe]res?",  # "Table des matières" anywhere
+    r"^\s*sommaire\s*$",  # "Sommaire" as full line
+    r"^\s*contents?\s*$",  # "Contents" as full line
+]
+
+TOC_LINE_PATTERNS = [
+    r"\.{3,}\s*\d+",  # Dot leaders: "Section name.......12"
     r"^[A-Z\s\.]+\s+\d+\s*$",  # "CHAPTER NAME    12"
     r"^\d+\.\s+.{5,50}\s+\d+\s*$",  # "1.2 Section name   15"
 ]
+
+
+def is_toc_from_docling(chunk_meta) -> bool:
+    """
+    Detect TOC using Docling's native element labels.
+
+    This is the preferred detection method as it uses Docling's
+    document structure analysis rather than regex patterns.
+
+    Args:
+        chunk_meta: Docling chunk metadata containing doc_items
+
+    Returns:
+        True if any doc_item has a TOC-related label
+    """
+    if not chunk_meta or not hasattr(chunk_meta, "doc_items"):
+        return False
+
+    for item in chunk_meta.doc_items or []:
+        if hasattr(item, "label") and item.label in TOC_LABELS:
+            return True
+    return False
 
 
 def is_toc_chunk(content: str) -> bool:
@@ -79,6 +108,7 @@ def is_toc_chunk(content: str) -> bool:
 
     Identifies TOC patterns based on:
     - TOC header keywords (sommaire, table des matières)
+    - Dot leaders (........) with page numbers
     - Lines with trailing page numbers
     - Section number + title + page number patterns
 
@@ -91,22 +121,30 @@ def is_toc_chunk(content: str) -> bool:
     if not content or len(content.strip()) < 10:
         return False
 
+    # Check for TOC headers anywhere in content
+    for pattern in TOC_HEADER_PATTERNS:
+        if re.search(pattern, content, re.IGNORECASE):
+            return True
+
     lines = content.strip().split("\n")
 
-    # Check for lines ending with page numbers (e.g., "Section name   12")
-    page_ref_lines = 0
+    # Count lines with TOC-like patterns
+    toc_indicator_lines = 0
     for line in lines:
         stripped = line.strip()
-        # Pattern: text followed by whitespace and 1-3 digit number at end
-        if re.search(r"\s+\d{1,3}\s*$", stripped):
-            page_ref_lines += 1
+        # Pattern: text followed by whitespace/dots and 1-3 digit number at end
+        if re.search(r"[\s\.]+\d{1,3}\s*$", stripped):
+            toc_indicator_lines += 1
+        # Check for dot leaders
+        if re.search(r"\.{3,}", stripped):
+            toc_indicator_lines += 1
 
-    # If more than 50% of lines have page references, likely TOC
-    if len(lines) > 0 and page_ref_lines / len(lines) > 0.5:
+    # If more than 40% of lines have TOC indicators, likely TOC
+    if len(lines) > 0 and toc_indicator_lines / len(lines) > 0.4:
         return True
 
-    # Check against known TOC patterns
-    for pattern in TOC_PATTERNS:
+    # Check against known TOC line patterns
+    for pattern in TOC_LINE_PATTERNS:
         if re.search(pattern, content, re.IGNORECASE | re.MULTILINE):
             return True
 
@@ -260,6 +298,11 @@ class DoclingHybridChunker:
                     if page_end is not None:
                         chunk_metadata["page_end"] = page_end
 
+                # Detect TOC using Docling labels (primary) or content patterns (fallback)
+                chunk_is_toc = False
+                if hasattr(chunk, "meta") and chunk.meta:
+                    chunk_is_toc = is_toc_from_docling(chunk.meta)
+
                 # Estimate character positions
                 start_char = current_pos
                 end_char = start_char + len(contextualized_text)
@@ -272,6 +315,7 @@ class DoclingHybridChunker:
                         end_char=end_char,
                         metadata=chunk_metadata,
                         token_count=token_count,
+                        is_toc=chunk_is_toc,  # Set from Docling label detection
                     )
                 )
 
