@@ -5,16 +5,151 @@ Implements hybrid search with:
 - French FTS (PostgreSQL)
 - RRF ranking
 - TOC filtering at database level
+- Title-based re-ranking for better relevance
+- Query expansion for vocabulary mismatch (configurable per-domain)
 """
 
 import logging
+import re
+import unicodedata
+from functools import lru_cache
+from pathlib import Path
 
 from pydantic_ai import RunContext
 
 from packages.config import settings
+from packages.core.query_expansion import expand_query
 from packages.core.types import RAGContext
+from packages.utils.prompt_loader import load_json_config
 
 logger = logging.getLogger(__name__)
+
+
+@lru_cache()
+def _load_stopwords(language: str = "default") -> set[str]:
+    """Load stopwords from configuration file.
+
+    Args:
+        language: Language code (default, fr, en, nl)
+
+    Returns:
+        Set of stopwords for the given language
+    """
+    data = load_json_config(
+        config_name="stopwords",
+        default_path=Path("data/config/stopwords.json"),
+        env_var_file="STOPWORDS_FILE",
+    )
+
+    if data:
+        # Try requested language, fallback to default
+        stopwords = data.get(language, data.get("default", []))
+        return set(stopwords)
+
+    # Hardcoded fallback if no config file
+    return {
+        "quoi",
+        "quel",
+        "quelle",
+        "quels",
+        "quelles",
+        "est",
+        "sont",
+        "une",
+        "des",
+        "les",
+        "pour",
+        "dans",
+        "avec",
+        "que",
+        "qui",
+        "comment",
+        "pourquoi",
+    }
+
+
+def _normalize_text(text: str) -> str:
+    """Normalize text by removing accents and lowercasing."""
+    # NFD decomposition separates base chars from accents
+    normalized = unicodedata.normalize("NFD", text.lower())
+    # Remove combining diacritical marks (accents)
+    return "".join(c for c in normalized if unicodedata.category(c) != "Mn")
+
+
+def _extract_keywords(query: str, classifiers: list[str] | None = None) -> list[str]:
+    """Extract meaningful keywords from query for title matching.
+
+    Generic extraction of classification patterns and significant terms.
+
+    Args:
+        query: The search query to extract keywords from
+        classifiers: List of classifier terms to match (from settings if None)
+    """
+    normalized = _normalize_text(query)
+
+    keywords = []
+
+    # Extract classification patterns using configurable classifiers
+    # Matches any letter, number, or roman numeral after the classifier
+    if classifiers is None:
+        classifiers = settings.search.title_rerank_classifiers
+    for classifier in classifiers:
+        patterns = re.findall(rf"{classifier}\s*([a-z0-9]+|[ivxlc]+)", normalized, re.IGNORECASE)
+        keywords.extend([f"{classifier} {p.upper()}" for p in patterns])
+
+    # Extract other significant terms (words > 3 chars, not stopwords)
+    # Stopwords loaded from config file (data/config/stopwords.json)
+    stopwords = _load_stopwords()
+    words = re.findall(r"\b[a-z]{4,}\b", normalized)
+    keywords.extend([w for w in words if w not in stopwords])
+
+    return keywords
+
+
+def _calculate_title_boost(
+    doc_title: str,
+    keywords: list[str],
+    max_boost: float | None = None,
+    classifiers: list[str] | None = None,
+) -> float:
+    """Calculate boost factor based on title-keyword matching.
+
+    Args:
+        doc_title: Document title to match against
+        keywords: Keywords extracted from query
+        max_boost: Maximum boost factor (from settings if None)
+        classifiers: List of classifier terms for primary matching (from settings if None)
+
+    Returns:
+        Boost factor between 0.0 and max_boost
+    """
+    if not keywords or not doc_title:
+        return 0.0
+
+    if max_boost is None:
+        max_boost = settings.search.title_rerank_boost
+    if classifiers is None:
+        classifiers = settings.search.title_rerank_classifiers
+
+    normalized_title = _normalize_text(doc_title)
+    boost = 0.0
+
+    # Calculate boost per-classifier for primary matches (2/3 of max)
+    # and per-keyword for secondary matches (1/5 of max)
+    primary_boost = max_boost * 2 / 3  # ~0.10 for default 0.15
+    secondary_boost = max_boost / 5  # ~0.03 for default 0.15
+
+    for keyword in keywords:
+        keyword_lower = keyword.lower()
+        if keyword_lower in normalized_title:
+            # Strong match for classifier patterns (e.g., "type A")
+            is_classifier_match = any(keyword_lower.startswith(c) for c in classifiers)
+            if is_classifier_match:
+                boost += primary_boost
+            else:
+                boost += secondary_boost
+
+    return min(boost, max_boost)
 
 
 async def search_knowledge_base(
@@ -48,19 +183,47 @@ async def search_knowledge_base(
         # Get RAG context from deps (dependency injection)
         rag_ctx: RAGContext = ctx.deps
 
-        # Generate embedding for query using cached embedder from context
-        query_embedding = await rag_ctx.embedder.embed_query(query)
+        # Expand query to handle vocabulary mismatch
+        # Uses configurable prompt from data/prompts/query_expansion.txt
+        expanded_query = await expand_query(query)
+
+        # Generate embedding for EXPANDED query for better retrieval
+        query_embedding = await rag_ctx.embedder.embed_query(expanded_query)
 
         # Use hybrid search (vector + FTS) with RRF ranking
         # TOC chunks are filtered at database level via exclude_toc
+        # Use expanded query for better FTS matching
         results = await rag_ctx.db_client.hybrid_search(
-            query_text=query,
+            query_text=expanded_query,
             query_embedding=query_embedding,
             limit=limit,
             similarity_threshold=similarity_threshold,
             exclude_toc=settings.search.exclude_toc,
             rrf_k=settings.search.rrf_k,
         )
+
+        # Apply title-based re-ranking to boost relevant documents (if enabled)
+        if settings.search.title_rerank_enabled:
+            keywords = _extract_keywords(query)
+        else:
+            keywords = []
+
+        if keywords:
+            for result in results:
+                doc_title = result.get("document_title", "")
+                boost = _calculate_title_boost(doc_title, keywords)
+                if boost > 0:
+                    original_sim = result.get("similarity", 0)
+                    result["similarity"] = min(original_sim + boost, 1.0)
+                    result["title_boosted"] = True
+                    logger.debug(
+                        f"Title boost applied: '{doc_title}' +{boost:.2f} "
+                        f"({original_sim:.3f} -> {result['similarity']:.3f})"
+                    )
+
+            # Re-sort by boosted similarity
+            results = sorted(results, key=lambda x: x.get("similarity", 0), reverse=True)
+            logger.info(f"Re-ranked results with keywords: {keywords}")
 
         logger.info(
             "RAG chunks retrieved",
