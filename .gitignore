@@ -73,9 +73,6 @@ data/examples/output/
 documents/
 .ruff_cache/
 
-# MCP configuration (contains API keys)
-.mcp.json
-
 # Local tool configurations
 .claude/
 .serena/

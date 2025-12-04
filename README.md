@@ -60,53 +60,68 @@ A domain-agnostic RAG (Retrieval-Augmented Generation) starter for building docu
 ### System Overview
 
 ```mermaid
-graph TB
-    subgraph "Client Layer"
+graph LR
+    subgraph Client["Client Layer"]
         USER[👤 User]
     end
 
-    subgraph "Frontend Service"
+    subgraph Frontend["Frontend"]
         NEXT["`**Next.js**<br/>:3000`"]
     end
 
-    subgraph "Backend Service"
-        API["`**FastAPI**<br/>:8000`"]
+    subgraph Backend["Backend Service :8000"]
+        API["`**FastAPI**`"]
+        AGENT["`**PydanticAI**<br/>Agent`"]
+
+        subgraph Tools["Tools"]
+            SEARCH["`*search*`"]
+            EXTERNAL["`*external APIs*`"]
+        end
     end
 
-    subgraph "Data Layer"
+    subgraph Data["Data & AI"]
         DB[("`**PostgreSQL**<br/>pgvector`")]
+        OPENAI["`**OpenAI**<br/>LLM + Embeddings`"]
+        APIS["`**External APIs**<br/>(Weather, etc.)`"]
     end
 
-    subgraph "External Services"
-        OPENAI["`**OpenAI**`"]
+    subgraph Sources["Sources"]
+        PDF["`📄 **Docling**<br/>PDF Parser`"]
+        WEB["`🌐 **Crawl4AI**<br/>Web Scraper`"]
     end
 
-    subgraph "Document Sources"
-        PDF[📄 PDF]
-        WEB[🌐 Web]
-    end
-
-    USER -->|`*requests*`| NEXT
-    NEXT -->|`*API calls*`| API
-    API <-->|`*vector search*`| DB
-    API <-->|`*LLM*`| OPENAI
-    PDF -->|`*ingest*`| API
-    WEB -->|`*scrape*`| API
+    USER -->|*requests*| NEXT
+    NEXT -->|*REST*| API
+    API --> AGENT
+    AGENT --> SEARCH
+    AGENT --> EXTERNAL
+    SEARCH <-->|*vector search*| DB
+    SEARCH -->|*embed*| OPENAI
+    AGENT <-->|*LLM*| OPENAI
+    EXTERNAL <-->|*API calls*| APIS
+    API -->|*uses*| PDF
+    API -->|*uses*| WEB
+    API -->|*store*| DB
 
     style USER fill:#e1f5ff,stroke:#0288d1
     style NEXT fill:#dcedc8,stroke:#689f38
     style API fill:#fff9c4,stroke:#fbc02d
+    style AGENT fill:#ffe0b2,stroke:#f57c00
+    style SEARCH fill:#f3e5f5,stroke:#7b1fa2
+    style EXTERNAL fill:#f3e5f5,stroke:#7b1fa2
     style DB fill:#f3e5f5,stroke:#7b1fa2
     style OPENAI fill:#ffe0b2,stroke:#f57c00
+    style APIS fill:#ffebee,stroke:#c62828
     style PDF fill:#ffebee,stroke:#c62828
     style WEB fill:#e0f2f1,stroke:#00695c
 ```
 
 **Key Components**:
-- **Frontend**: SSE streaming
-- **Backend**: RAG pipeline
-- **Database**: Semantic search
-- **AI Services**: Embeddings (1536D) + LLM
+- **Frontend**: SSE streaming for real-time responses
+- **Backend**: FastAPI orchestrating PydanticAI agent
+- **PydanticAI Agent**: Orchestrates tools (search + external APIs)
+- **Tools**: Vector search (core) + External APIs (weather, custom)
+- **Data & AI**: PostgreSQL/pgvector + OpenAI (LLM + embeddings)
 - **Ingestion**: Docling (PDF) + Crawl4AI (Web)
 
 ### 3.1 Ingestion Pipeline
