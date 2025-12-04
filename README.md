@@ -61,9 +61,7 @@ A domain-agnostic RAG (Retrieval-Augmented Generation) starter for building docu
 
 ```mermaid
 graph LR
-    subgraph Client["Client Layer"]
-        USER[👤 User]
-    end
+    USER[👤 User]
 
     subgraph Frontend["Frontend"]
         NEXT["`**Next.js**<br/>:3000`"]
@@ -85,7 +83,7 @@ graph LR
         APIS["`**External APIs**<br/>(Weather, etc.)`"]
     end
 
-    subgraph Sources["Sources"]
+    subgraph Ingestion["Ingestion (offline)"]
         PDF["`📄 **Docling**<br/>PDF Parser`"]
         WEB["`🌐 **Crawl4AI**<br/>Web Scraper`"]
     end
@@ -99,9 +97,8 @@ graph LR
     SEARCH -->|*embed*| OPENAI
     AGENT <-->|*LLM*| OPENAI
     EXTERNAL <-->|*API calls*| APIS
-    API -->|*uses*| PDF
-    API -->|*uses*| WEB
-    API -->|*store*| DB
+    PDF -.->|*ingest*| DB
+    WEB -.->|*ingest*| DB
 
     style USER fill:#e1f5ff,stroke:#0288d1
     style NEXT fill:#dcedc8,stroke:#689f38
