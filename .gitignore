@@ -80,6 +80,10 @@ documents/
 .serena/
 memory-bank/
 
+# Project documentation (local only)
+docs/
+CLAUDE.md
+
 # Docling cache
 docling/
 
