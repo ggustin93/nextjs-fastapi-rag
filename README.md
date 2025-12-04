@@ -48,8 +48,8 @@ A domain-agnostic RAG (Retrieval-Augmented Generation) starter for building docu
 
 | Layer | Technology |
 |-------|------------|
-| Frontend | Next.js 15.5.6, TypeScript, Tailwind CSS, shadcn/ui |
-| Backend | FastAPI, PydanticAI, Uvicorn, AsyncPG |
+| Frontend | Next.js 15, TypeScript, Tailwind CSS, shadcn/ui |
+| Backend | FastAPI, PydanticAI |
 | Database | PostgreSQL + pgvector |
 | AI/ML | OpenAI, Docling, Crawl4AI |
 | Testing | Pytest, Jest |
@@ -142,29 +142,103 @@ graph LR
 
 ```
 nextjs-fastapi-rag/
-├── packages/
-│   ├── core/               # RAG agent, CLI
-│   │   ├── config/         # Optional domain configuration
-│   │   └── tools/          # External API tool patterns
-│   ├── ingestion/          # Docling chunker, embedder
-│   ├── scraper/            # Crawl4AI web scraper
-│   ├── config/             # Centralized settings
-│   └── utils/              # DB, cache, providers
+├── packages/                   # Shared Python packages (pip install -e .)
+│   ├── core/                   # RAG agent, CLI
+│   │   ├── config/             # Optional domain configuration
+│   │   └── tools/              # External API tool patterns
+│   ├── ingestion/              # Docling chunker, embedder
+│   ├── scraper/                # Crawl4AI web scraper
+│   ├── config/                 # Centralized settings
+│   └── utils/                  # DB client, cache, providers
 ├── services/
-│   ├── api/                # FastAPI backend
-│   └── web/                # Next.js frontend
+│   ├── api/                    # FastAPI backend (see below)
+│   └── web/                    # Next.js frontend (see below)
 ├── tests/
-│   ├── unit/               # Unit tests
-│   ├── integration/        # API integration tests
-│   └── results/            # Evaluation metrics
-├── scripts/                # Utility scripts
-├── data/                   # Data directory (gitignored except examples/)
-│   ├── raw/pdfs/           # Manual PDF documents for ingestion
-│   ├── processed/scraped/  # Web scraper output (auto-generated)
-│   └── examples/           # Tutorial examples (tracked in git)
-├── pyproject.toml          # Python dependencies
-└── Makefile                # Development commands
+│   ├── unit/                   # Unit tests (pytest)
+│   ├── integration/            # API integration tests
+│   └── results/                # Evaluation metrics
+├── scripts/                    # Utility scripts
+├── data/                       # Data directory (gitignored except examples/)
+│   ├── raw/pdfs/               # Manual PDF documents for ingestion
+│   ├── processed/scraped/      # Web scraper output (auto-generated)
+│   └── examples/               # Tutorial examples (tracked in git)
+├── sql/                        # Database schema and migrations
+├── pyproject.toml              # Python dependencies
+└── Makefile                    # Development commands
 ```
+
+### 4.1 Backend Structure (`services/api/`)
+
+FastAPI application exposing REST + SSE endpoints for RAG operations.
+
+```
+services/api/
+├── app/
+│   ├── main.py             # FastAPI app, lifespan, CORS
+│   ├── api/                # Route handlers
+│   │   ├── chat.py         # POST /chat/stream - SSE streaming chat
+│   │   ├── documents.py    # GET /documents - File serving
+│   │   ├── health.py       # GET /health - Health check
+│   │   └── system.py       # GET /system/models - LLM config
+│   ├── core/
+│   │   └── rag_wrapper.py  # RAG agent wrapper, history management
+│   └── middleware/         # Request logging, error handling
+└── README.md
+```
+
+**Key Files:**
+| File | Purpose |
+|------|---------|
+| `main.py` | App initialization, singleton resources (embedder, DB client) |
+| `chat.py` | Streaming endpoint using `StreamingResponse` + SSE |
+| `rag_wrapper.py` | Wraps `packages.core.agent`, manages conversation history |
+
+### 4.2 Frontend Structure (`services/web/`)
+
+Next.js 15 application with App Router, TypeScript, and shadcn/ui.
+
+```
+services/web/
+├── src/
+│   ├── app/                    # Next.js App Router
+│   │   ├── layout.tsx          # Root layout with providers
+│   │   ├── page.tsx            # Home page (chat interface)
+│   │   └── api/                # API routes (if needed)
+│   ├── components/
+│   │   ├── chat/               # Chat-specific components
+│   │   │   ├── ChatContainer.tsx   # Main chat wrapper
+│   │   │   ├── ChatInput.tsx       # Message input with submit
+│   │   │   ├── ChatLayout.tsx      # Responsive layout
+│   │   │   ├── ChatMessage.tsx     # Message bubble with sources
+│   │   │   ├── DocumentPanel.tsx   # Side panel for doc preview
+│   │   │   ├── DocumentViewer.tsx  # PDF/Markdown viewer
+│   │   │   ├── PdfViewer.tsx       # react-pdf integration
+│   │   │   ├── LLMSelector.tsx     # Model dropdown
+│   │   │   └── ToolCallBadge.tsx   # Tool activity indicator
+│   │   ├── ui/                 # shadcn/ui components
+│   │   ├── Providers.tsx       # Theme, query providers
+│   │   └── ErrorBoundary.tsx   # Error handling
+│   ├── hooks/
+│   │   ├── useChat.ts          # SSE streaming, message state
+│   │   └── useMediaQuery.ts    # Responsive breakpoints
+│   ├── lib/
+│   │   ├── api-client.ts       # Typed API calls to backend
+│   │   └── utils.ts            # cn(), formatters
+│   └── types/                  # TypeScript interfaces
+├── public/                     # Static assets
+├── next.config.ts              # Next.js configuration
+├── tailwind.config.ts          # Tailwind + shadcn theming
+└── package.json
+```
+
+**Key Components:**
+| Component | Purpose |
+|-----------|---------|
+| `ChatContainer` | Orchestrates chat state, connects to `useChat` hook |
+| `ChatMessage` | Renders messages with markdown, source citations |
+| `DocumentViewer` | Displays PDF/MD with page navigation |
+| `useChat` | SSE streaming hook, handles `EventSource` parsing |
+| `api-client` | Typed fetch wrapper for `/api/v1/*` endpoints |
 
 ## 5. Getting Started
 
@@ -322,39 +396,44 @@ Default: Generic knowledge assistant with numbered source citations.
 
 ### 9.2 Adding Custom Tools
 
-The system uses a tool registry pattern for easy extensibility:
+Tools use PydanticAI's `RunContext` pattern for dependency injection:
 
 ```python
-from packages.core.tools import register_tool
 from pydantic_ai import RunContext
 from packages.core.types import RAGContext
 
-# 1. Define your tool function
 async def my_custom_tool(
     ctx: RunContext[RAGContext],
-    query: str
+    query: str,
+    option: bool = False
 ) -> str:
-    """Tool description for the LLM."""
-    # Your tool logic here
-    return "Result"
+    """Tool description - the LLM reads this docstring.
 
-# 2. Register the tool
-register_tool("my_tool", my_custom_tool)
+    Args:
+        ctx: RAG context with dependencies (db_client, etc.)
+        query: User's search query
+        option: Optional parameter
 
-# 3. Enable via environment variable
-# ENABLED_TOOLS='["weather", "my_tool"]'
+    Returns:
+        Formatted result string
+    """
+    # Access shared resources via context
+    db = ctx.deps.db_client
+
+    # Your tool logic
+    return f"Result for: {query}"
 ```
 
-**Configuration Options:**
-```bash
-# Enable all tools (default)
-# ENABLED_TOOLS not set or ENABLED_TOOLS=null
+Then register in `packages/core/tools/__init__.py`:
 
-# Enable specific tools only
-ENABLED_TOOLS='["weather", "my_tool"]'
+```python
+from packages.core.tools.my_tool import my_custom_tool
 
-# Search only (no external API tools)
-ENABLED_TOOLS='[]'
+_AVAILABLE_TOOLS = {
+    "search_knowledge_base": search_knowledge_base,
+    "weather": get_weather,
+    "my_tool": my_custom_tool,  # Add here
+}
 ```
 
 See `packages/core/tools/weather_tool.py` for a complete implementation example.
@@ -380,18 +459,13 @@ The factory ensures consistent configuration across CLI, API, and tests.
 
 ## 10. Design Decisions
 
-| Decision | Rationale |
-|----------|-----------|
-| **Tool Registry Pattern** | Eliminates duplication, enables dynamic configuration |
-| **Agent Factory Pattern** | Single source of truth for agent creation |
-| **Domain-Agnostic Core** | Generic by default, optional domain customization |
-| **Dependency Injection** | Type-safe context via PydanticAI RunContext |
-| **PydanticAI** | Type safety, simpler than LangChain |
-| **Hybrid Search** | Vector + FTS + RRF fusion for better retrieval |
-| **pgvector** | Self-hosted, ACID compliance |
-| **Docling** | Better PDF parsing than alternatives |
-| **SSE** | Simpler than WebSocket for streaming chat |
-| **UV** | Faster dependency resolution than pip |
+| Choice | Why |
+|--------|-----|
+| **PydanticAI** | Type-safe agents, simpler than LangChain |
+| **Hybrid Search** | Vector + FTS + RRF fusion beats pure vector search |
+| **pgvector** | Self-hosted, ACID-compliant, no vendor lock-in |
+| **Docling** | Best PDF structure preservation (tables, headers) |
+| **SSE Streaming** | Simpler than WebSocket for chat responses |
 
 ## 11. License
 
