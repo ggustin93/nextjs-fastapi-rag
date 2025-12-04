@@ -61,6 +61,7 @@ archives/
 
 # Data directories (raw documents and processed output)
 data/raw/
+data/raw/pdfs/
 data/processed/
 data/prompts/
 

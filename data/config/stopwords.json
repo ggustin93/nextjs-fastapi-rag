@@ -1,4 +1,7 @@
 {
+  "_comment": "Stopwords for query preprocessing - filtered before semantic search to improve retrieval quality",
+  "_usage": "Used by packages/core/search.py to remove common words that add noise to embeddings",
+  "_customization": "Add domain-specific low-value terms to improve search precision",
   "default": ["quoi", "quel", "quelle", "quels", "quelles", "est", "sont", "une", "des", "les", "pour", "dans", "avec", "que", "qui", "comment", "pourquoi"],
   "fr": ["quoi", "quel", "quelle", "quels", "quelles", "est", "sont", "une", "des", "les", "pour", "dans", "avec", "que", "qui", "comment", "pourquoi", "cette", "tout", "tous", "etre", "avoir", "faire", "peut", "plus", "moins", "tres", "bien", "aussi"],
   "en": ["what", "which", "is", "are", "the", "for", "in", "with", "that", "who", "how", "why", "this", "all", "be", "have", "do", "can", "more", "less", "very", "well", "also", "from", "about", "when", "where"],
