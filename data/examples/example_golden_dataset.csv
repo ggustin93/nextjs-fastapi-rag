@@ -1,0 +1,16 @@
+query,expected_doc_path,expected_keywords,min_similarity,query_type
+"How do I authenticate with the API?","data/raw/pdfs/","['API key','authentication','OAuth','Bearer token']",0.65,semantic
+"What are the rate limits?","data/raw/pdfs/","['rate limit','requests per minute','throttling','429']",0.65,comprehensive
+"How do I paginate results?","data/raw/pdfs/","['pagination','cursor','offset','limit','page size']",0.70,procedural
+"What error codes can the API return?","data/raw/pdfs/","['error code','400','401','403','404','500']",0.65,comprehensive
+"How do I set up webhooks?","data/raw/pdfs/","['webhook','callback','endpoint','event','notification']",0.65,procedural
+"What is the maximum request size?","data/raw/pdfs/","['request size','payload','limit','MB']",0.70,exact_match
+"How do I refresh an access token?","data/raw/pdfs/","['refresh token','OAuth','expiration','JWT']",0.65,procedural
+"What SDKs are available?","data/raw/pdfs/","['SDK','Python','JavaScript','library','client']",0.60,semantic
+"How do I handle errors?","data/raw/pdfs/","['error handling','try catch','retry','backoff']",0.65,semantic
+"What is the API versioning strategy?","data/raw/pdfs/","['version','v1','v2','deprecation','migration']",0.60,semantic
+"API authentication methods?","data/raw/pdfs/","['API key','OAuth','JWT','Bearer']",0.75,keyword
+"Rate limit exceeded error?","data/raw/pdfs/","['429','rate limit','retry after','throttle']",0.70,keyword
+"Webhook retry policy?","data/raw/pdfs/","['retry','webhook','failure','timeout']",0.65,procedural
+"API response format?","data/raw/pdfs/","['JSON','response','format','content-type']",0.70,exact_match
+"How to test API locally?","data/raw/pdfs/","['sandbox','test','development','mock']",0.60,procedural

@@ -62,6 +62,7 @@ archives/
 # Data directories (raw documents and processed output)
 data/raw/
 data/processed/
+data/prompts/
 
 # Keep data/examples/ tracked for tutorials (but ignore output/)
 !data/examples/
@@ -88,6 +89,10 @@ htmlcov/
 
 # Test results and evaluation outputs
 tests/results/
+
+# Local evaluation scripts (contains domain-specific patterns)
+scripts/evaluate_rag.py
+tests/golden_dataset.csv
 
 # Model caches
 .flashrank_cache/

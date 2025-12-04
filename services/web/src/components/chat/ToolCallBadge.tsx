@@ -32,15 +32,6 @@ const toolMetadata: Record<string, {
     borderColor: 'border-indigo-200',
     iconBg: 'bg-indigo-100',
   },
-  fetch_osiris_worksite: {
-    icon: '🏗️',
-    displayName: 'OSIRIS API',
-    description: 'Fetched worksite data from OSIRIS',
-    color: 'text-amber-700',
-    bgColor: 'bg-amber-50',
-    borderColor: 'border-amber-200',
-    iconBg: 'bg-amber-100',
-  },
 };
 
 // Fallback for unknown tools

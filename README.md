@@ -57,6 +57,58 @@ A domain-agnostic RAG (Retrieval-Augmented Generation) starter for building docu
 
 ## 3. Architecture
 
+### System Overview
+
+```mermaid
+graph TB
+    subgraph "Client Layer"
+        USER[👤 User]
+    end
+
+    subgraph "Frontend Service"
+        NEXT["`**Next.js**<br/>:3000`"]
+    end
+
+    subgraph "Backend Service"
+        API["`**FastAPI**<br/>:8000`"]
+    end
+
+    subgraph "Data Layer"
+        DB[("`**PostgreSQL**<br/>pgvector`")]
+    end
+
+    subgraph "External Services"
+        OPENAI["`**OpenAI**`"]
+    end
+
+    subgraph "Document Sources"
+        PDF[📄 PDF]
+        WEB[🌐 Web]
+    end
+
+    USER -->|`*requests*`| NEXT
+    NEXT -->|`*API calls*`| API
+    API <-->|`*vector search*`| DB
+    API <-->|`*LLM*`| OPENAI
+    PDF -->|`*ingest*`| API
+    WEB -->|`*scrape*`| API
+
+    style USER fill:#e1f5ff,stroke:#0288d1
+    style NEXT fill:#dcedc8,stroke:#689f38
+    style API fill:#fff9c4,stroke:#fbc02d
+    style DB fill:#f3e5f5,stroke:#7b1fa2
+    style OPENAI fill:#ffe0b2,stroke:#f57c00
+    style PDF fill:#ffebee,stroke:#c62828
+    style WEB fill:#e0f2f1,stroke:#00695c
+```
+
+**Key Components**:
+- **Frontend**: SSE streaming
+- **Backend**: RAG pipeline
+- **Database**: Semantic search
+- **AI Services**: Embeddings (1536D) + LLM
+- **Ingestion**: Docling (PDF) + Crawl4AI (Web)
+
 ### 3.1 Ingestion Pipeline
 
 ```mermaid

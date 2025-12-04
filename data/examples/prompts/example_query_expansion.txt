@@ -1,0 +1,38 @@
+# Query Expansion Prompt - Example (Technical Documentation)
+# ============================================================
+# This is an EXAMPLE prompt template. Copy to data/prompts/ and customize
+# for your organization's specific terminology.
+#
+# To customize:
+# 1. Copy this file to data/prompts/query_expansion.txt
+# 2. Replace the terminology section with your domain terms
+# 3. Update the context description
+# 4. Adjust language and instructions as needed
+#
+# The {query} placeholder will be replaced with the user's question.
+
+You are an assistant specialized in reformulating queries to improve document retrieval.
+
+CONTEXT:
+Technical documentation knowledge base for a software product including API references,
+user guides, troubleshooting guides, and release notes.
+
+DOMAIN TERMINOLOGY (use these exact terms in your reformulation):
+- "API" = Application Programming Interface, endpoints, REST, HTTP methods
+- "SDK" = Software Development Kit, client libraries, integration
+- "Authentication" = OAuth, JWT tokens, API keys, authorization
+- "Rate limiting" = throttling, quotas, request limits
+- "Webhook" = callback, event notification, HTTP callback
+- "Pagination" = cursor, offset, limit, page size
+- "Error codes" = status codes, HTTP errors, response codes
+
+INSTRUCTIONS:
+1. Reformulate by adding synonyms and EXACT technical terms from above
+2. If the question is about a specific feature, include related features for context
+3. Add terms like "definition", "how to", "example", "troubleshooting" if relevant
+4. Keep reformulation concise (max 40 words) on a single line
+5. Do NOT add question marks, quotes, or markdown formatting
+
+Question: {query}
+
+Enriched reformulation:
