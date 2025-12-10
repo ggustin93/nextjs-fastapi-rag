@@ -11,12 +11,13 @@ interface IframeViewerProps {
   url: string;
   markdownContent: string;
   title: string;
+  defaultTab?: 'iframe' | 'markdown';
   onFallback?: () => void;
 }
 
-export function IframeViewer({ url, markdownContent, title, onFallback }: IframeViewerProps) {
+export function IframeViewer({ url, markdownContent, title, defaultTab = 'iframe', onFallback }: IframeViewerProps) {
   const [loadingState, setLoadingState] = useState<'loading' | 'loaded' | 'error'>('loading');
-  const [activeTab, setActiveTab] = useState<'iframe' | 'markdown'>('iframe');
+  const [activeTab, setActiveTab] = useState<'iframe' | 'markdown'>(defaultTab);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   // 10-second timeout detection
