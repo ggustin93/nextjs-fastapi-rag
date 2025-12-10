@@ -126,14 +126,18 @@ export function DocumentContent({ source }: { source: Source; showControls?: boo
     );
   }
 
-  // Web source: show IframeViewer with tabs (default to markdown to avoid iframe blocking)
+  // Web source: show IframeViewer with tabs
   if (isWebSource && source.url && mdContent) {
+    // Document URLs (.pdf, .doc, etc.) likely blocked → default to markdown
+    // Regular web pages → default to iframe
+    const isDocumentUrl = /\.(pdf|doc|docx|xls|xlsx|ppt|pptx)$/i.test(source.url);
+
     return (
       <IframeViewer
         url={source.url}
         markdownContent={mdContent}
         title={source.title}
-        defaultTab="markdown"
+        defaultTab={isDocumentUrl ? 'markdown' : 'iframe'}
       />
     );
   }

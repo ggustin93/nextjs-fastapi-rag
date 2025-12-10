@@ -127,10 +127,12 @@ export function IframeViewer({ url, markdownContent, title, defaultTab = 'iframe
         )}
 
         {activeTab === 'markdown' && (
-          <div className="h-full overflow-auto p-6 bg-background">
-            <article className="prose prose-sm dark:prose-invert max-w-none">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{markdownContent}</ReactMarkdown>
-            </article>
+          <div className="h-full overflow-auto bg-background">
+            <div className="max-w-4xl mx-auto px-6 py-8">
+              <article className="prose prose-sm dark:prose-invert max-w-none prose-headings:font-semibold prose-a:text-primary prose-code:text-foreground prose-pre:bg-muted">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{markdownContent}</ReactMarkdown>
+              </article>
+            </div>
           </div>
         )}
       </div>
