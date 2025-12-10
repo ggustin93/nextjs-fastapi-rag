@@ -274,6 +274,10 @@ async def search_knowledge_base(
             # Build source object
             source_obj = {"title": doc_title, "path": doc_source, "similarity": similarity}
 
+            # Include content inline for non-PDF sources (avoids frontend fetch)
+            if not doc_source.lower().endswith(".pdf"):
+                source_obj["content"] = content
+
             # Add page info for PDFs
             if page_start is not None:
                 source_obj["page_number"] = page_start

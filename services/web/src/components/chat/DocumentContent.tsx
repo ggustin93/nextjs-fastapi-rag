@@ -26,8 +26,15 @@ export function DocumentContent({ source }: { source: Source; showControls?: boo
 
   const isPdf = source.path.toLowerCase().endsWith('.pdf');
 
-  // Data Fetch
+  // Data Fetch (skip for inline content)
   useEffect(() => {
+    // Non-PDF with inline content: render directly without fetch
+    if (!isPdf && source.content) {
+      setMdContent(source.content);
+      setIsLoading(false);
+      return;
+    }
+
     const controller = new AbortController();
     setIsLoading(true);
     setError(null);
@@ -72,7 +79,7 @@ export function DocumentContent({ source }: { source: Source; showControls?: boo
         URL.revokeObjectURL(currentBlobUrl);
       }
     };
-  }, [source.path, isPdf]);
+  }, [source.path, source.content, isPdf]);
 
   // Renderers
   const isWebSource = Boolean(source.url);

@@ -385,6 +385,34 @@ class WeatherToolConfig:
 
 
 @dataclass(frozen=True)
+class OsirisWorksiteConfig:
+    """OSIRIS Brussels worksite API configuration.
+
+    OSIRIS provides Brussels worksite data via GeoJSON API with Basic authentication.
+
+    Environment Variables:
+        OSIRIS_BASE_URL: OSIRIS API endpoint (default: "https://api.osiris.brussels/geoserver/ogc/features/v1/collections/api:WORKSITES/items")
+        OSIRIS_USERNAME: Basic auth username (default: "cdco")
+        OSIRIS_PASSWORD: Basic auth password (required - set in .env)
+        OSIRIS_CACHE_TTL: Cache time-to-live in seconds (default: 900 = 15 minutes)
+        OSIRIS_TIMEOUT: API request timeout in seconds (default: 10)
+    """
+
+    base_url: str = field(
+        default_factory=lambda: os.getenv(
+            "OSIRIS_BASE_URL",
+            "https://api.osiris.brussels/geoserver/ogc/features/v1/collections/api:WORKSITES/items",
+        )
+    )
+    username: str = field(default_factory=lambda: os.getenv("OSIRIS_USERNAME", "cdco"))
+    password: Optional[str] = field(default_factory=lambda: _get_clean_env("OSIRIS_PASSWORD"))
+    cache_ttl_seconds: int = field(
+        default_factory=lambda: int(os.getenv("OSIRIS_CACHE_TTL", "900"))
+    )
+    timeout_seconds: int = field(default_factory=lambda: int(os.getenv("OSIRIS_TIMEOUT", "10")))
+
+
+@dataclass(frozen=True)
 class Settings:
     """Main application settings aggregating all domain configs.
 
@@ -398,6 +426,7 @@ class Settings:
         batch_size = settings.embedding.batch_size
         pool_size = settings.database.pool_max_size
         weather_config = settings.weather.base_url
+        osiris_config = settings.osiris.username
     """
 
     llm: LLMConfig = field(default_factory=LLMConfig)
@@ -407,6 +436,7 @@ class Settings:
     search: SearchConfig = field(default_factory=SearchConfig)
     api: APIConfig = field(default_factory=APIConfig)
     weather: WeatherToolConfig = field(default_factory=WeatherToolConfig)
+    osiris: OsirisWorksiteConfig = field(default_factory=OsirisWorksiteConfig)
 
     # RAG agent tool configuration
     # Environment Variable: ENABLED_TOOLS - JSON array of tool names (e.g., '["weather"]')
@@ -443,6 +473,7 @@ __all__ = [
     "SearchConfig",
     "APIConfig",
     "WeatherToolConfig",
+    "OsirisWorksiteConfig",
     "get_settings",
     "settings",
 ]

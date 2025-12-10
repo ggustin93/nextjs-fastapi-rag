@@ -5,9 +5,11 @@ Core Tools (always available):
 
 Optional Tools:
 - get_weather: Weather information via Open-Meteo API
+- get_worksite_info: Brussels worksite data via OSIRIS API
 - external_api_example: Template for custom API integrations
 """
 
+from packages.core.tools.osiris_worksite import get_worksite_info
 from packages.core.tools.search_knowledge_base import search_knowledge_base
 from packages.core.tools.weather_tool import get_weather
 
@@ -15,6 +17,7 @@ from packages.core.tools.weather_tool import get_weather
 _AVAILABLE_TOOLS = {
     "search_knowledge_base": search_knowledge_base,
     "weather": get_weather,
+    "osiris_worksite": get_worksite_info,
 }
 
 
@@ -44,7 +47,7 @@ def get_tools(enabled_tools: list[str] | None = None) -> list:
 
     if enabled_tools is None:
         # Default: all tools
-        tools.extend([get_weather])
+        tools.extend([get_weather, get_worksite_info])
     else:
         # Only specified tools
         for tool_name in enabled_tools:
@@ -73,6 +76,7 @@ def register_tool(name: str, tool_fn):
 __all__ = [
     "search_knowledge_base",
     "get_weather",
+    "get_worksite_info",
     "get_tools",
     "register_tool",
 ]

@@ -3,6 +3,7 @@ export interface Source {
   path: string;
   similarity: number;
   url?: string;              // Original URL for scraped web content
+  content?: string;          // Inline content (non-PDF sources render without fetch)
   metadata?: {               // Full metadata for future use
     url?: string;
     source?: string;
