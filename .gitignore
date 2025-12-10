@@ -71,7 +71,7 @@ data/prompts/*.txt
 !data/prompts/README.md
 
 # Scraper config (domain-specific, use sources.yaml.example as template)
-data/config/sources.yaml
+data/raw/web/sources.yaml
 
 # Keep data/examples/ tracked for tutorials (but ignore output/)
 !data/examples/
