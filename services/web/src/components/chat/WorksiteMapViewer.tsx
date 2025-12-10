@@ -63,11 +63,23 @@ function LeafletMap({
 
   useEffect(() => {
     // Only run on client
-    if (typeof window === 'undefined' || !mapRef.current) return;
+    if (typeof window === 'undefined') return;
 
-    let map: L.Map | null = null;
+    let timeoutId: NodeJS.Timeout;
+    let isMounted = true;
 
     const initMap = async () => {
+      // Small delay to ensure DOM is ready
+      await new Promise(resolve => { timeoutId = setTimeout(resolve, 50); });
+
+      if (!isMounted || !mapRef.current) return;
+
+      // Clean up any existing map instance first
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+      }
+
       // Dynamic import of Leaflet
       const L = await import('leaflet');
       // @ts-ignore - CSS import
@@ -81,10 +93,10 @@ function LeafletMap({
         shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
       });
 
-      if (!mapRef.current || mapInstanceRef.current) return;
+      if (!isMounted || !mapRef.current) return;
 
       // Create map centered on Brussels
-      map = L.map(mapRef.current).setView([50.8503, 4.3517], 13);
+      const map = L.map(mapRef.current).setView([50.8503, 4.3517], 13);
       mapInstanceRef.current = map;
 
       // Add OpenStreetMap tiles
@@ -109,14 +121,12 @@ function LeafletMap({
         fillOpacity: 0.35,
       };
 
-      let polygonLayer: L.Polygon | L.LayerGroup;
-
       if (geometry.type === 'MultiPolygon') {
         const multiCoords = geometry.coordinates as number[][][][];
         const layers = multiCoords.map(poly =>
           L.polygon(convertCoords(poly), polygonStyle)
         );
-        polygonLayer = L.layerGroup(layers).addTo(map);
+        const layerGroup = L.layerGroup(layers).addTo(map);
 
         // Fit bounds to all polygons
         const allBounds = layers.reduce((acc, layer) =>
@@ -126,8 +136,8 @@ function LeafletMap({
         map.fitBounds(allBounds, { padding: [50, 50] });
       } else {
         const singleCoords = geometry.coordinates as number[][][];
-        polygonLayer = L.polygon(convertCoords(singleCoords), polygonStyle).addTo(map);
-        map.fitBounds(polygonLayer.getBounds(), { padding: [50, 50] });
+        const polygon = L.polygon(convertCoords(singleCoords), polygonStyle).addTo(map);
+        map.fitBounds(polygon.getBounds(), { padding: [50, 50] });
       }
 
       // Add popup with worksite info
@@ -160,6 +170,8 @@ function LeafletMap({
     initMap();
 
     return () => {
+      isMounted = false;
+      clearTimeout(timeoutId);
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;

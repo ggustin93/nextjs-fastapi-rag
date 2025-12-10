@@ -58,7 +58,7 @@ const defaultToolMetadata = {
 
 interface ToolCallBadgeProps {
   toolCalls?: ToolCallMetadata[];
-  onViewMap?: (worksiteId: string) => void;
+  onViewMap?: (worksiteId: string) => Promise<void>;
 }
 
 export function ToolCallBadge({ toolCalls, onViewMap }: ToolCallBadgeProps) {
@@ -140,9 +140,13 @@ export function ToolCallBadge({ toolCalls, onViewMap }: ToolCallBadgeProps) {
             {metadata.hasMapAction && onViewMap && Boolean(toolCall.tool_args?.worksite_id) && (
               <div className="px-3 pb-2">
                 <button
-                  onClick={() => {
+                  onClick={async () => {
                     setLoadingMap(index);
-                    onViewMap(String(toolCall.tool_args.worksite_id));
+                    try {
+                      await onViewMap(String(toolCall.tool_args.worksite_id));
+                    } finally {
+                      setLoadingMap(null);
+                    }
                   }}
                   disabled={loadingMap === index}
                   className={`

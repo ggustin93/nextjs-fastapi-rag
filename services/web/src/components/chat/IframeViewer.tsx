@@ -15,10 +15,39 @@ interface IframeViewerProps {
   onFallback?: () => void;
 }
 
+// Domains that require proxying (X-Frame-Options blocking)
+const PROXY_DOMAINS = [
+  'my.osiris.brussels',
+  'osiris.brussels',
+  'ejustice.just.fgov.be',
+  'mobilit.belgium.be',
+];
+
+// Build proxied URL for blocked domains
+const getProxiedUrl = (url: string): string => {
+  try {
+    const parsed = new URL(url);
+    const needsProxy = PROXY_DOMAINS.some(
+      domain => parsed.hostname === domain || parsed.hostname.endsWith(`.${domain}`)
+    );
+
+    if (needsProxy) {
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+      return `${baseUrl}/proxy?url=${encodeURIComponent(url)}`;
+    }
+  } catch {
+    // Invalid URL, return as-is
+  }
+  return url;
+};
+
 export function IframeViewer({ url, markdownContent, title, defaultTab = 'iframe', onFallback }: IframeViewerProps) {
   const [loadingState, setLoadingState] = useState<'loading' | 'loaded' | 'error'>('loading');
   const [activeTab, setActiveTab] = useState<'iframe' | 'markdown'>(defaultTab);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  // Get proxied URL for blocked domains
+  const iframeSrc = getProxiedUrl(url);
 
   // 10-second timeout detection
   useEffect(() => {
@@ -115,7 +144,7 @@ export function IframeViewer({ url, markdownContent, title, defaultTab = 'iframe
             {/* Iframe */}
             <iframe
               ref={iframeRef}
-              src={url}
+              src={iframeSrc}
               sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
               onLoad={handleIframeLoad}
               onError={handleIframeError}
