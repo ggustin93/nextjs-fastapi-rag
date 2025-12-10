@@ -6,7 +6,6 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Loader2, AlertCircle } from 'lucide-react';
 import type { Source } from '@/types/chat';
-import { IframeViewer } from './IframeViewer';
 import { PdfViewer } from './PdfViewer';
 
 // Dynamic import for WorksiteMapViewer (Leaflet needs client-only)
@@ -126,19 +125,30 @@ export function DocumentContent({ source }: { source: Source; showControls?: boo
     );
   }
 
-  // Web source with iframe support
+  // Web source with inline content: render markdown directly (avoid iframe blocking)
   if (isWebSource && source.url && mdContent) {
     return (
-      <IframeViewer
-        url={source.url}
-        markdownContent={mdContent}
-        title={source.title}
-      />
+      <div className="h-full overflow-auto p-6">
+        <div className="mb-4 pb-3 border-b flex items-center justify-between">
+          <span className="text-xs text-muted-foreground">Scraped content</span>
+          <a
+            href={source.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-primary hover:underline flex items-center gap-1"
+          >
+            View original ↗
+          </a>
+        </div>
+        <article className="prose prose-sm dark:prose-invert max-w-none">
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{mdContent}</ReactMarkdown>
+        </article>
+      </div>
     );
   }
 
   // Regular markdown (non-web sources)
-  if (!isPdf && !isWebSource && mdContent) {
+  if (!isPdf && mdContent) {
     return (
       <div className="h-full overflow-auto p-6">
         <article className="prose prose-sm dark:prose-invert max-w-none">
