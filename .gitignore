@@ -59,18 +59,26 @@ htmlcov/
 # Archives (reference material, kept locally)
 archives/
 
-# Data directories (raw documents and processed output)
-data/raw/
-data/raw/pdfs/
-data/processed/
-data/prompts/
+# Data directories - ignore content files, track structure (README.md)
+data/raw/documents/**/*.*
+!data/raw/documents/**/README.md
+data/raw/notes/*.*
+!data/raw/notes/README.md
+data/processed/scraped/*.*
+!data/processed/scraped/README.md
+data/prompts/*.txt
+!data/prompts/*.txt.example
+!data/prompts/README.md
+
+# Scraper config (domain-specific, use sources.yaml.example as template)
+data/config/sources.yaml
 
 # Keep data/examples/ tracked for tutorials (but ignore output/)
 !data/examples/
 data/examples/output/
 
 # Old documents directory (migrated to data/)
-documents/
+/documents/
 .ruff_cache/
 
 # Local tool configurations

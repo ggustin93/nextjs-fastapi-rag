@@ -6,15 +6,17 @@ This directory contains all data for the RAG knowledge base.
 
 ```
 data/
-├── raw/                   # Unprocessed input files
-│   └── pdfs/              # Manual PDF documents
-│       └── guichet/       # OSIRIS user guides (French)
-├── processed/             # Generated/processed content
-│   └── scraped/           # Web scraper output
-│       ├── myosiris/      # From my.osiris.brussels
-│       ├── belgian_legal/ # From eJustice portal
-│       └── osiris/        # Additional OSIRIS content
-└── examples/              # Tutorial examples (tracked in git)
+├── raw/                      # Unprocessed input files
+│   ├── documents/            # Source documents (PDF, DOCX, etc.)
+│   │   ├── BusinessAnalysis/ # Business & functional analysis
+│   │   ├── Slides/           # Training presentations
+│   │   └── UserGuides/       # User documentation
+│   └── notes/                # Custom markdown notes
+├── processed/                # Generated/processed content
+│   └── scraped/              # Web scraper output
+├── config/                   # Configuration files
+│   └── sources.yaml          # Scraper sources config
+└── examples/                 # Tutorial examples (tracked in git)
 ```
 
 ## Data Flow
@@ -29,8 +31,8 @@ data/
          │                   │                   │
          ▼                   ▼                   ▼
    ┌──────────┐       ┌──────────┐       ┌──────────┐
-   │   PDFs   │       │  Scraper │       │  Audio   │
-   │ (manual) │       │  (auto)  │       │(whisper) │
+   │Documents │       │  Scraper │       │  Notes   │
+   │(PDF,DOCX)│       │  (auto)  │       │   (md)   │
    └────┬─────┘       └────┬─────┘       └────┬─────┘
         │                  │                  │
         ▼                  ▼                  ▼
@@ -48,12 +50,21 @@ data/
 
 ## Usage
 
-### Adding PDFs
+### Adding Documents
 
-Place PDF documents in `data/raw/pdfs/`:
+Place documents in `data/raw/documents/` (organized by category):
 
 ```bash
-cp my-document.pdf data/raw/pdfs/
+cp my-document.pdf data/raw/documents/UserGuides/
+cp analysis.docx data/raw/documents/BusinessAnalysis/
+```
+
+### Adding Notes
+
+Place markdown notes in `data/raw/notes/`:
+
+```bash
+cp my-notes.md data/raw/notes/
 ```
 
 ### Running the Scraper
@@ -61,34 +72,38 @@ cp my-document.pdf data/raw/pdfs/
 Web scraper outputs to `data/processed/scraped/`:
 
 ```bash
-uv run python scripts/scrape.py --source myosiris
+make scrape  # Uses config from data/config/sources.yaml
 ```
 
 ### Ingestion
 
-Ingest all data (raw + processed) into the vector database:
+Ingest all data into the vector database:
 
 ```bash
-# Ingest PDFs
-uv run python -m packages.ingestion.ingest --documents data/raw/pdfs
-
-# Ingest scraped content
-uv run python -m packages.ingestion.ingest --documents data/processed/scraped
+make ingest  # Runs 3-step pipeline: documents → notes → scraped
 ```
 
 ## Supported Formats
 
-**Raw Input:**
+**Documents:**
 - PDF (.pdf)
-- Word (.docx)
+- Word (.docx, .doc)
+- PowerPoint (.pptx, .ppt)
+- Excel (.xlsx, .xls)
+- HTML (.html, .htm)
 - Markdown (.md)
-- Audio (.mp3, .wav) - transcribed with Whisper
+- Text (.txt)
+- Audio (.mp3, .wav, .m4a) - transcribed with Whisper
 
-**Processed Output:**
-- Markdown with YAML frontmatter (from scraper)
+**Scraped Output:**
+- Markdown with YAML frontmatter
 
 ## Git Status
 
-- `data/raw/` - **gitignored** (local data)
-- `data/processed/` - **gitignored** (generated output)
-- `data/examples/` - **tracked** (tutorials)
+| Directory | Status | Notes |
+|-----------|--------|-------|
+| `data/raw/documents/` | gitignored | Local docs, README tracked |
+| `data/raw/notes/` | gitignored | Local notes, README tracked |
+| `data/processed/` | gitignored | Generated output |
+| `data/config/sources.yaml` | gitignored | Domain-specific config |
+| `data/examples/` | **tracked** | Tutorials |
