@@ -1,3 +1,22 @@
+// Worksite geometry from OSIRIS API
+export interface WorksiteGeometry {
+  type: 'MultiPolygon' | 'Polygon';
+  coordinates: number[][][][] | number[][][];
+}
+
+// Worksite info from OSIRIS tool
+export interface WorksiteInfo {
+  id_ws: string;
+  label_fr?: string;
+  label_nl?: string;
+  status_fr?: string;
+  status_nl?: string;
+  road_impl_fr?: string;
+  road_impl_nl?: string;
+  pgm_start_date?: string;
+  pgm_end_date?: string;
+}
+
 export interface Source {
   title: string;
   path: string;
@@ -15,6 +34,9 @@ export interface Source {
   // PDF page number support
   page_number?: number;      // First page (for auto-scroll)
   page_range?: string;       // Formatted range (e.g., "p. 5-7" or "p. 5")
+  // Worksite map support (OSIRIS tool)
+  geometry?: WorksiteGeometry;
+  worksiteInfo?: WorksiteInfo;
 }
 
 export interface ToolCallMetadata {

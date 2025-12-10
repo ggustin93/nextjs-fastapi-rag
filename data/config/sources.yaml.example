@@ -1,0 +1,115 @@
+# Web Scraper Source Configuration
+# Copy this file to sources.yaml and customize for your domain
+
+output_dir: "data/processed/scraped"
+
+default_rate_limit:
+  requests_per_second: 1.0
+  delay_between_pages: 2.0
+  max_concurrent: 2
+
+retry:
+  max_retries: 3
+  backoff_factor: 2.0
+  retry_statuses: [429, 500, 502, 503, 504]
+
+headless: true
+
+sources:
+  # Example: Documentation site
+  example_docs:
+    name: "Example Documentation"
+    base_url: "https://docs.example.com"
+    description: "Technical documentation"
+    category: "documentation"
+    language: "en"
+
+    start_urls:
+      - "https://docs.example.com/guide/"
+
+    url_patterns:
+      - "/guide/"
+      - "/api/"
+
+    exclude_patterns:
+      - "/login"
+      - "/auth"
+      - "/api/"
+
+    selectors:
+      content: "article, .content, main"
+      title: "h1, .title"
+      exclude:
+        - "nav"
+        - "header"
+        - "footer"
+        - ".sidebar"
+
+    max_depth: 2
+    max_pages: 100
+    follow_links: true
+
+    rate_limit:
+      requests_per_second: 0.5
+      delay_between_pages: 2.0
+      max_concurrent: 1
+
+    output_subdir: "docs/example"
+
+    extra_metadata:
+      domain: "documentation"
+
+  # Example: News/Blog site
+  # example_news:
+  #   name: "Example News"
+  #   base_url: "https://news.example.com"
+  #   description: "News articles"
+  #   category: "news"
+  #   language: "en"
+  #
+  #   start_urls:
+  #     - "https://news.example.com/latest/"
+  #
+  #   url_patterns:
+  #     - "/article/"
+  #     - "/news/"
+  #
+  #   exclude_patterns:
+  #     - "/tag/"
+  #     - "/author/"
+  #
+  #   max_depth: 1
+  #   max_pages: 25
+  #   follow_links: true
+  #
+  #   rate_limit:
+  #     delay_between_pages: 5.0
+  #
+  #   output_subdir: "news/example"
+
+  # Example: Government portal
+  # gov_portal:
+  #   name: "Government Portal"
+  #   base_url: "https://portal.gov.example"
+  #   description: "Government information"
+  #   category: "government"
+  #   language: "fr"
+  #
+  #   start_urls:
+  #     - "https://portal.gov.example/"
+  #
+  #   url_patterns: []  # Accept all internal links
+  #
+  #   exclude_patterns:
+  #     - "/login"
+  #     - "/auth"
+  #     - "\\?.*token="
+  #
+  #   max_depth: 3
+  #   max_pages: 100
+  #   follow_links: true
+  #
+  #   output_subdir: "gov/portal"
+  #
+  #   extra_metadata:
+  #     region: "Example Region"

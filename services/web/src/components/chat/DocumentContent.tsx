@@ -1,12 +1,19 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Loader2, AlertCircle } from 'lucide-react';
 import type { Source } from '@/types/chat';
 import { IframeViewer } from './IframeViewer';
 import { PdfViewer } from './PdfViewer';
+
+// Dynamic import for WorksiteMapViewer (Leaflet needs client-only)
+const WorksiteMapViewer = dynamic(
+  () => import('./WorksiteMapViewer').then(mod => mod.WorksiteMapViewer),
+  { ssr: false, loading: () => <div className="h-full flex items-center justify-center"><Loader2 className="h-5 w-5 animate-spin" /></div> }
+);
 
 // Helper to clean API URLs
 const getDocumentUrl = (path: string) => {
@@ -83,6 +90,17 @@ export function DocumentContent({ source }: { source: Source; showControls?: boo
 
   // Renderers
   const isWebSource = Boolean(source.url);
+  const hasGeometry = Boolean(source.geometry);
+
+  // Worksite map rendering (OSIRIS tool)
+  if (hasGeometry && source.geometry) {
+    return (
+      <WorksiteMapViewer
+        geometry={source.geometry}
+        worksiteInfo={source.worksiteInfo}
+      />
+    );
+  }
 
   if (error) {
     return (
