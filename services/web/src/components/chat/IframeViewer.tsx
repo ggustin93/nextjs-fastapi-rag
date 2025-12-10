@@ -5,7 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, AlertCircle, Globe, FileText } from 'lucide-react';
+import { Loader2, AlertCircle, Globe, FileText, ExternalLink } from 'lucide-react';
 
 interface IframeViewerProps {
   url: string;
@@ -15,39 +15,10 @@ interface IframeViewerProps {
   onFallback?: () => void;
 }
 
-// Domains that require proxying (X-Frame-Options blocking)
-const PROXY_DOMAINS = [
-  'my.osiris.brussels',
-  'osiris.brussels',
-  'ejustice.just.fgov.be',
-  'mobilit.belgium.be',
-];
-
-// Build proxied URL for blocked domains
-const getProxiedUrl = (url: string): string => {
-  try {
-    const parsed = new URL(url);
-    const needsProxy = PROXY_DOMAINS.some(
-      domain => parsed.hostname === domain || parsed.hostname.endsWith(`.${domain}`)
-    );
-
-    if (needsProxy) {
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
-      return `${baseUrl}/proxy?url=${encodeURIComponent(url)}`;
-    }
-  } catch {
-    // Invalid URL, return as-is
-  }
-  return url;
-};
-
 export function IframeViewer({ url, markdownContent, title, defaultTab = 'iframe', onFallback }: IframeViewerProps) {
   const [loadingState, setLoadingState] = useState<'loading' | 'loaded' | 'error'>('loading');
   const [activeTab, setActiveTab] = useState<'iframe' | 'markdown'>(defaultTab);
   const iframeRef = useRef<HTMLIFrameElement>(null);
-
-  // Get proxied URL for blocked domains
-  const iframeSrc = getProxiedUrl(url);
 
   // 10-second timeout detection
   useEffect(() => {
@@ -102,10 +73,21 @@ export function IframeViewer({ url, markdownContent, title, defaultTab = 'iframe
           Markdown Content
         </Button>
         {loadingState === 'error' && (
-          <Badge variant="destructive" className="ml-auto text-[10px]">
-            Iframe blocked
+          <Badge variant="destructive" className="text-[10px]">
+            Blocked
           </Badge>
         )}
+
+        {/* Always show "Open in new tab" - KISS escape hatch */}
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="ml-auto flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          Open in new tab
+          <ExternalLink className="h-3 w-3" />
+        </a>
       </div>
 
       {/* Content Area */}
@@ -144,7 +126,7 @@ export function IframeViewer({ url, markdownContent, title, defaultTab = 'iframe
             {/* Iframe */}
             <iframe
               ref={iframeRef}
-              src={iframeSrc}
+              src={url}
               sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
               onLoad={handleIframeLoad}
               onError={handleIframeError}
