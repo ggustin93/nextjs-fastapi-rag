@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import type { ToolCallMetadata } from '@/types/chat';
-import { ChevronDown, ChevronRight, Clock, Zap } from 'lucide-react';
+import { ChevronDown, ChevronRight, Clock, Zap, Map } from 'lucide-react';
 
 // Tool metadata with enhanced visual identity
 const toolMetadata: Record<string, {
@@ -13,6 +13,7 @@ const toolMetadata: Record<string, {
   bgColor: string;
   borderColor: string;
   iconBg: string;
+  hasMapAction?: boolean;
 }> = {
   get_weather: {
     icon: '🌤️',
@@ -32,6 +33,16 @@ const toolMetadata: Record<string, {
     borderColor: 'border-indigo-200',
     iconBg: 'bg-indigo-100',
   },
+  get_worksite_info: {
+    icon: '🚧',
+    displayName: 'OSIRIS API',
+    description: 'Retrieved Brussels worksite data',
+    color: 'text-orange-700',
+    bgColor: 'bg-orange-50',
+    borderColor: 'border-orange-200',
+    iconBg: 'bg-orange-100',
+    hasMapAction: true,
+  },
 };
 
 // Fallback for unknown tools
@@ -47,10 +58,12 @@ const defaultToolMetadata = {
 
 interface ToolCallBadgeProps {
   toolCalls?: ToolCallMetadata[];
+  onViewMap?: (worksiteId: string) => void;
 }
 
-export function ToolCallBadge({ toolCalls }: ToolCallBadgeProps) {
+export function ToolCallBadge({ toolCalls, onViewMap }: ToolCallBadgeProps) {
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
+  const [loadingMap, setLoadingMap] = useState<number | null>(null);
 
   if (!toolCalls || toolCalls.length === 0) {
     return null;
@@ -122,6 +135,30 @@ export function ToolCallBadge({ toolCalls }: ToolCallBadgeProps) {
                 </div>
               )}
             </button>
+
+            {/* View Map Action for OSIRIS worksite tool */}
+            {metadata.hasMapAction && onViewMap && Boolean(toolCall.tool_args?.worksite_id) && (
+              <div className="px-3 pb-2">
+                <button
+                  onClick={() => {
+                    setLoadingMap(index);
+                    onViewMap(String(toolCall.tool_args.worksite_id));
+                  }}
+                  disabled={loadingMap === index}
+                  className={`
+                    flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium
+                    transition-all duration-200
+                    ${loadingMap === index
+                      ? 'bg-orange-200 text-orange-500 cursor-wait'
+                      : 'bg-orange-100 text-orange-700 hover:bg-orange-200 hover:shadow-sm'
+                    }
+                  `}
+                >
+                  <Map className="w-3.5 h-3.5" />
+                  {loadingMap === index ? 'Loading...' : 'View Map'}
+                </button>
+              </div>
+            )}
 
             {/* Expanded Arguments Section */}
             {isExpanded && hasArgs && (

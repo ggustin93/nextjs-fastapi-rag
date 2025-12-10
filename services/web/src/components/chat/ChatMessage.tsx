@@ -1,10 +1,12 @@
 'use client';
 
+import { useState, useCallback } from 'react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import type { ChatMessage as ChatMessageType, Source } from '@/types/chat';
 import { SourcesList } from './DocumentViewer';
+import { ToolCallBadge } from './ToolCallBadge';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -57,12 +59,59 @@ interface ChatMessageProps {
 
 export function ChatMessage({ message, onOpenDocument }: ChatMessageProps) {
   const isUser = message.role === 'user';
+  const [mapError, setMapError] = useState<string | null>(null);
 
   // Filter and sort sources before rendering
   const displaySources = filterAndSortSources(
     message.sources || [],
     message.citedIndices || []
   );
+
+  // Handle "View Map" action for OSIRIS worksite tool
+  const handleViewMap = useCallback(async (worksiteId: string) => {
+    if (!onOpenDocument) return;
+
+    setMapError(null);
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+
+    try {
+      const response = await fetch(`${baseUrl}/worksites/${worksiteId}/geometry`);
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          setMapError(`Worksite ${worksiteId} not found`);
+          return;
+        }
+        throw new Error(`API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      // Create a Source with geometry for DocumentPanel
+      const mapSource: Source = {
+        title: data.label_fr || data.label_nl || `Worksite ${worksiteId}`,
+        path: `worksite://${worksiteId}`,
+        similarity: 1.0,
+        geometry: data.geometry,
+        worksiteInfo: {
+          id_ws: data.id_ws,
+          label_fr: data.label_fr,
+          label_nl: data.label_nl,
+          status_fr: data.status_fr,
+          status_nl: data.status_nl,
+          road_impl_fr: data.road_impl_fr,
+          road_impl_nl: data.road_impl_nl,
+          pgm_start_date: data.pgm_start_date,
+          pgm_end_date: data.pgm_end_date,
+        },
+      };
+
+      onOpenDocument(mapSource);
+    } catch (error) {
+      console.error('Failed to fetch worksite geometry:', error);
+      setMapError('Failed to load map data');
+    }
+  }, [onOpenDocument]);
 
   return (
     <div
@@ -177,6 +226,18 @@ export function ChatMessage({ message, onOpenDocument }: ChatMessageProps) {
             >
               {message.content}
             </ReactMarkdown>
+          </div>
+        )}
+
+        {/* Tool Calls with View Map action */}
+        {!isUser && message.toolCalls && message.toolCalls.length > 0 && (
+          <ToolCallBadge toolCalls={message.toolCalls} onViewMap={handleViewMap} />
+        )}
+
+        {/* Map loading error display */}
+        {mapError && (
+          <div className="mt-2 px-3 py-2 bg-red-50 border border-red-200 rounded-md text-xs text-red-700">
+            {mapError}
           </div>
         )}
 

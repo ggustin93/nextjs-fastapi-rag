@@ -33,8 +33,14 @@ export function DocumentContent({ source }: { source: Source; showControls?: boo
 
   const isPdf = source.path.toLowerCase().endsWith('.pdf');
 
-  // Data Fetch (skip for inline content)
+  // Data Fetch (skip for inline content or geometry sources)
   useEffect(() => {
+    // Geometry sources (OSIRIS worksite): render map directly, no fetch needed
+    if (source.geometry) {
+      setIsLoading(false);
+      return;
+    }
+
     // Non-PDF with inline content: render directly without fetch
     if (!isPdf && source.content) {
       setMdContent(source.content);
@@ -86,7 +92,7 @@ export function DocumentContent({ source }: { source: Source; showControls?: boo
         URL.revokeObjectURL(currentBlobUrl);
       }
     };
-  }, [source.path, source.content, isPdf]);
+  }, [source.path, source.content, source.geometry, isPdf]);
 
   // Renderers
   const isWebSource = Boolean(source.url);

@@ -27,7 +27,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic_ai import Agent
 
-from app.api import chat, documents, health, system
+from app.api import chat, documents, health, system, worksites
 from app.middleware import PerformanceMiddleware
 from packages.__version__ import __version__
 from packages.config import settings
@@ -45,6 +45,7 @@ logger = logging.getLogger(__name__)
 # Application State: Singleton Resources
 # =============================================================================
 
+
 @dataclass
 class AppState:
     """Application-level singleton resources.
@@ -56,6 +57,7 @@ class AppState:
     - db_client: Shared Supabase client with connection pooling
     - embedder: Shared embedding model (lazy-loaded OpenAI client)
     """
+
     agent: Optional[Agent] = None
     db_client: Optional[SupabaseRestClient] = None
     embedder: Optional[object] = None  # EmbeddingGenerator type
@@ -100,6 +102,7 @@ async def lifespan(app: FastAPI):
 
         # 2. Initialize embedder (lazy-loaded OpenAI client)
         from packages.ingestion.embedder import create_embedder
+
         app_state.embedder = create_embedder()
         logger.info("✅ Embedder initialized (shared OpenAI client)")
 
@@ -123,6 +126,7 @@ async def lifespan(app: FastAPI):
         logger.info("✅ Supabase client closed")
 
     logger.info("👋 RAG resources cleanup complete")
+
 
 # Configure logging with INFO level to show debug logs
 logging.basicConfig(
@@ -179,6 +183,7 @@ app.include_router(chat.router, prefix="/api/v1")
 app.include_router(documents.router, prefix="/api/v1")
 app.include_router(health.router, prefix="/api/v1")
 app.include_router(system.router, prefix="/api/v1")
+app.include_router(worksites.router, prefix="/api/v1")
 
 
 @app.get("/")

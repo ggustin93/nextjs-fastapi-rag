@@ -188,39 +188,35 @@ async def stream_agent_response(
                         session_id, result.all_messages(), model=effective_model
                     )
 
-                # Detect tool calls from message kinds
+                # Extract tool calls from ModelResponse parts (pydantic-ai structure)
+                from pydantic_ai.messages import ModelResponse, ToolCallPart
+
                 all_messages = result.all_messages()
-                tool_calls = [
-                    m for m in all_messages if getattr(m, "kind", None) == "request-tool-call"
-                ]
-                tool_responses = [
-                    m for m in all_messages if getattr(m, "kind", None) == "response-tool-return"
-                ]
+                tool_call_parts = []
 
-                if tool_calls:
-                    logger.info(
-                        f"🔧 Tool calls: {len(tool_calls)}, responses: {len(tool_responses)}"
-                    )
+                for msg in all_messages:
+                    if isinstance(msg, ModelResponse):
+                        for part in msg.parts:
+                            if isinstance(part, ToolCallPart):
+                                tool_call_parts.append(part)
 
-                if tool_calls and tool_responses:
-                    for tool_call, tool_response in zip(tool_calls, tool_responses):
-                        try:
-                            tool_name = getattr(tool_call, "tool_name", "unknown")
-                            tool_args = {}
-                            if hasattr(tool_call, "args") and tool_call.args:
-                                if hasattr(tool_call.args, "model_dump"):
-                                    tool_args = tool_call.args.model_dump(mode="json")
-                                elif isinstance(tool_call.args, dict):
-                                    tool_args = tool_call.args
+                if tool_call_parts:
+                    logger.info(f"🔧 Found {len(tool_call_parts)} tool call(s)")
 
-                            yield {
-                                "type": "tool_call",
-                                "tool_name": tool_name,
-                                "tool_args": tool_args,
-                                "execution_time_ms": 150,
-                            }
-                        except Exception as tool_err:
-                            logger.error(f"Tool event error: {tool_err}")
+                for tool_part in tool_call_parts:
+                    try:
+                        tool_name = tool_part.tool_name
+                        tool_args = tool_part.args_as_dict() if tool_part.args else {}
+
+                        logger.info(f"🔧 Emitting tool_call: {tool_name} with args: {tool_args}")
+                        yield {
+                            "type": "tool_call",
+                            "tool_name": tool_name,
+                            "tool_args": tool_args,
+                            "execution_time_ms": 150,
+                        }
+                    except Exception as tool_err:
+                        logger.error(f"Tool event error: {tool_err}")
 
                 # Extract cited source indices from complete response
                 final_text = await result.get_output()
