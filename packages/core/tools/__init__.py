@@ -3,10 +3,9 @@
 Available Tools:
 - search_knowledge_base: Semantic search over knowledge base
 - weather: Weather information via Open-Meteo API
-- osiris_worksite: Brussels worksite data via OSIRIS API
+- osiris_worksite: Brussels worksite data via OSIRIS API (optional, proprietary)
 """
 
-from packages.core.tools.osiris_worksite import get_worksite_info
 from packages.core.tools.search_knowledge_base import search_knowledge_base
 from packages.core.tools.weather_tool import get_weather
 
@@ -14,8 +13,15 @@ from packages.core.tools.weather_tool import get_weather
 _AVAILABLE_TOOLS = {
     "search_knowledge_base": search_knowledge_base,
     "weather": get_weather,
-    "osiris_worksite": get_worksite_info,
 }
+
+# OSIRIS tool is optional (proprietary IP, not in public repo)
+try:
+    from packages.core.tools.osiris_worksite import get_worksite_info
+
+    _AVAILABLE_TOOLS["osiris_worksite"] = get_worksite_info
+except ImportError:
+    get_worksite_info = None
 
 
 def get_tools(enabled_tools: list[str] | None = None) -> list:
@@ -30,14 +36,14 @@ def get_tools(enabled_tools: list[str] | None = None) -> list:
         List of tool functions
 
     Examples:
-        >>> get_tools()  # All tools
-        [search_knowledge_base, get_weather, get_worksite_info]
+        >>> get_tools()  # All available tools
+        [search_knowledge_base, get_weather, ...]
 
         >>> get_tools(["weather"])  # ONLY weather (strict isolation)
         [get_weather]
 
-        >>> get_tools(["search_knowledge_base", "osiris_worksite"])  # RAG tools only
-        [search_knowledge_base, get_worksite_info]
+        >>> get_tools(["search_knowledge_base"])  # RAG search only
+        [search_knowledge_base]
     """
     if enabled_tools is None:
         # Default: all tools
@@ -69,7 +75,10 @@ def register_tool(name: str, tool_fn):
 __all__ = [
     "search_knowledge_base",
     "get_weather",
-    "get_worksite_info",
     "get_tools",
     "register_tool",
 ]
+
+# Add OSIRIS to exports if available
+if get_worksite_info is not None:
+    __all__.append("get_worksite_info")

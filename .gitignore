@@ -110,6 +110,11 @@ tests/golden_dataset.csv
 # Model caches
 .flashrank_cache/
 
+# OSIRIS API tool (proprietary IP - keep locally, do not commit)
+packages/core/tools/osiris_worksite.py
+tests/unit/packages/test_osiris_tool.py
+scripts/test_osiris_tool.py
+
 # Next.js public static assets (generated)
 services/web/public/*.svg
 
