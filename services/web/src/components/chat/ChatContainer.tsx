@@ -23,7 +23,7 @@ interface ChatContainerProps {
 }
 
 export function ChatContainer({ onOpenDocument }: ChatContainerProps) {
-  const { messages, isLoading, error, currentTool, selectedModel, setSelectedModel, sendMessage, clearMessages } = useChat();
+  const { messages, isLoading, error, currentTool, selectedModel, setSelectedModel, selectedAgent, setSelectedAgent, sendMessage, clearMessages } = useChat();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when new messages arrive
@@ -121,7 +121,12 @@ export function ChatContainer({ onOpenDocument }: ChatContainerProps) {
         )}
 
         <div className="shrink-0">
-          <ChatInput onSend={sendMessage} disabled={isLoading} />
+          <ChatInput
+            onSend={sendMessage}
+            disabled={isLoading}
+            selectedAgent={selectedAgent}
+            onSelectAgent={setSelectedAgent}
+          />
         </div>
       </CardContent>
     </Card>

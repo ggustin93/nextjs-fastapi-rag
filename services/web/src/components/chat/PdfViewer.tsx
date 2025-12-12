@@ -43,20 +43,8 @@ export function PdfViewer({
     onLoadError?.(new Error('Failed to load PDF'));
   };
 
-  const triggerSearch = () => {
-    // Focus iframe and trigger Ctrl+F
-    iframeRef.current?.focus();
-    iframeRef.current?.contentWindow?.focus();
-    // Dispatch keyboard event for Ctrl+F
-    const event = new KeyboardEvent('keydown', {
-      key: 'f',
-      code: 'KeyF',
-      ctrlKey: true,
-      metaKey: true,
-      bubbles: true,
-    });
-    iframeRef.current?.contentWindow?.document?.dispatchEvent(event);
-  };
+  // Note: Browser security prevents programmatic Ctrl+F in iframes
+  // Users must use native keyboard shortcut directly
 
   if (hasError) {
     return (
@@ -93,16 +81,15 @@ export function PdfViewer({
           <span>Loading PDF...</span>
         </div>
       )}
+      {/* Search hint - native PDF viewer supports Ctrl+F/Cmd+F */}
       {!isLoading && (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={triggerSearch}
-          title="Search (Ctrl+F)"
-          className="absolute top-2 right-2 z-10 h-8 w-8 p-0 bg-background/80 hover:bg-background"
-        >
-          <Search className="h-4 w-4" />
-        </Button>
+        <div className="absolute top-2 right-2 z-10 flex items-center gap-1.5 px-2.5 py-1.5 bg-background/90 backdrop-blur-sm rounded-md border shadow-sm text-xs text-muted-foreground">
+          <Search className="h-3.5 w-3.5" />
+          <span className="hidden sm:inline">Search:</span>
+          <kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">
+            {typeof navigator !== 'undefined' && navigator.platform?.includes('Mac') ? '⌘F' : 'Ctrl+F'}
+          </kbd>
+        </div>
       )}
       <iframe
         ref={iframeRef}

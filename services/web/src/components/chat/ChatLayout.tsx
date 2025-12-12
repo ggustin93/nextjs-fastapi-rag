@@ -18,7 +18,6 @@ export function ChatLayout() {
   // Prevent hydration mismatch by only rendering after mount
   // This is a valid pattern for SSR hydration fixes per React docs
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsMounted(true);
   }, []);
 

@@ -17,6 +17,7 @@ export function useChat() {
   const [error, setError] = useState<string | null>(null);
   const [currentTool, setCurrentTool] = useState<string | null>(null);
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
+  const [selectedAgent, setSelectedAgent] = useState<string | null>('rag');
   const sessionIdRef = useRef<string>(generateSessionId());
 
   // Load messages from localStorage on mount
@@ -66,6 +67,7 @@ export function useChat() {
       timestamp: new Date(),
       sources: [],
       citedIndices: [],
+      toolCalls: [],  // Explicitly initialize to prevent persistence from previous messages
     };
 
     setMessages((prev) => [...prev, userMessage, initialAssistantMessage]);
@@ -73,8 +75,13 @@ export function useChat() {
     setError(null);
 
     try {
+      // Prepend @agent mention if a specific agent is selected (backend parses this)
+      const messageWithAgent = selectedAgent && selectedAgent !== 'rag'
+        ? `@${selectedAgent} ${content}`
+        : content;
+
       await streamChat(
-        { message: content, session_id: sessionIdRef.current, model: selectedModel || undefined },
+        { message: messageWithAgent, session_id: sessionIdRef.current, model: selectedModel || undefined },
         (event) => {
           if (event.type === 'token') {
             // Append token to assistant message using functional update
@@ -110,6 +117,7 @@ export function useChat() {
               tool_name: event.tool_name || '',
               tool_args: event.tool_args || {},
               execution_time_ms: event.execution_time_ms,
+              tool_result: event.tool_result,  // Include raw result for debug display
             };
 
             // Update the assistant message with tool calls
@@ -138,7 +146,7 @@ export function useChat() {
       setIsLoading(false);
       setCurrentTool(null); // Clear current tool when done
     }
-  }, [isLoading]);
+  }, [isLoading, selectedModel, selectedAgent]);
 
   const clearMessages = useCallback(() => {
     setMessages([]);
@@ -160,6 +168,8 @@ export function useChat() {
     currentTool,
     selectedModel,
     setSelectedModel,
+    selectedAgent,
+    setSelectedAgent,
     sendMessage,
     clearMessages,
   };

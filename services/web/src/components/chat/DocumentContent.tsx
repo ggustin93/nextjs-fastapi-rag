@@ -8,6 +8,7 @@ import { Loader2, AlertCircle } from 'lucide-react';
 import type { Source } from '@/types/chat';
 import { IframeViewer } from './IframeViewer';
 import { PdfViewer } from './PdfViewer';
+import { ChunkDocumentViewer } from './ChunkDocumentViewer';
 
 // Dynamic import for WorksiteMapViewer (Leaflet needs client-only)
 const WorksiteMapViewer = dynamic(
@@ -108,6 +109,27 @@ export function DocumentContent({ source }: { source: Source; showControls?: boo
     );
   }
 
+  // Web source: show IframeViewer with tabs (BEFORE chunk routing to preserve existing behavior)
+  if (isWebSource && source.url && mdContent) {
+    // Document URLs (.pdf, .doc, etc.) likely blocked → default to markdown
+    // Regular web pages → default to iframe
+    const isDocumentUrl = /\.(pdf|doc|docx|xls|xlsx|ppt|pptx)$/i.test(source.url);
+
+    return (
+      <IframeViewer
+        url={source.url}
+        markdownContent={mdContent}
+        title={source.title}
+        defaultTab={isDocumentUrl ? 'markdown' : 'iframe'}
+      />
+    );
+  }
+
+  // NEW: Chunk + Full Document toggle (when chunk content available)
+  if (source.content) {
+    return <ChunkDocumentViewer source={source} />;
+  }
+
   if (error) {
     return (
       <div className="h-full flex flex-col items-center justify-center p-6 text-destructive text-center">
@@ -145,10 +167,24 @@ export function DocumentContent({ source }: { source: Source; showControls?: boo
   // Regular markdown (non-web sources)
   if (!isPdf && mdContent) {
     return (
-      <div className="h-full overflow-auto p-6">
-        <article className="prose prose-sm dark:prose-invert max-w-none">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{mdContent}</ReactMarkdown>
-        </article>
+      <div className="h-full overflow-auto bg-background">
+        <div className="max-w-4xl mx-auto px-6 py-8">
+          <article className="
+            prose prose-sm dark:prose-invert max-w-none
+            prose-headings:font-semibold prose-headings:tracking-tight
+            prose-h1:text-2xl prose-h1:border-b prose-h1:pb-2 prose-h1:mb-4
+            prose-h2:text-xl prose-h2:mt-8 prose-h2:mb-3
+            prose-h3:text-lg prose-h3:mt-6 prose-h3:mb-2
+            prose-h4:text-base prose-h4:mt-4 prose-h4:mb-2
+            prose-p:leading-relaxed
+            prose-a:text-primary prose-code:text-foreground prose-pre:bg-muted
+            prose-strong:text-foreground prose-strong:font-semibold
+            prose-ul:my-4 prose-li:my-1
+            prose-table:text-sm prose-th:bg-muted/50
+          ">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{mdContent}</ReactMarkdown>
+          </article>
+        </div>
       </div>
     );
   }

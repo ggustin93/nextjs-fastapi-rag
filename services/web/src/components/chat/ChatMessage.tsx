@@ -5,52 +5,10 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import type { ChatMessage as ChatMessageType, Source } from '@/types/chat';
-import { SourcesList } from './DocumentViewer';
+import { GroupedSourcesList } from './GroupedSourcesList';
 import { ToolCallBadge } from './ToolCallBadge';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-
-/**
- * Filter and sort sources to show:
- * 1. All cited sources (from [1], [2], etc. in response)
- * 2. Top 10 sources by similarity (backend already sorted)
- * 3. Deduplicate by path, maintain similarity order
- *
- * Optimized: O(n) single-pass algorithm, leverages backend pre-sorting
- */
-function filterAndSortSources(
-  sources: Source[],
-  citedIndices: number[]
-): Source[] {
-  if (!sources?.length) return [];
-
-  const citedSet = new Set(citedIndices);
-  const seenPaths = new Map<string, Source>();
-  const MAX_TOP_SOURCES = 10;
-
-  // Backend already sorts by similarity desc - maintain order
-  // Single pass: add cited sources + top 5 unique sources
-  for (let i = 0; i < sources.length; i++) {
-    const source = sources[i];
-    const isCited = citedSet.has(i + 1);
-
-    // Skip duplicates (keep first = highest similarity)
-    if (seenPaths.has(source.path)) continue;
-
-    // Add if cited OR if we need more top sources
-    if (isCited || seenPaths.size < MAX_TOP_SOURCES) {
-      seenPaths.set(source.path, source);
-    }
-
-    // Early exit: have all cited + enough top sources
-    if (citedSet.size > 0 && seenPaths.size >= Math.max(citedSet.size, MAX_TOP_SOURCES)) {
-      break;
-    }
-  }
-
-  // Already in similarity order due to backend sorting
-  return Array.from(seenPaths.values());
-}
 
 interface ChatMessageProps {
   message: ChatMessageType;
@@ -60,12 +18,6 @@ interface ChatMessageProps {
 export function ChatMessage({ message, onOpenDocument }: ChatMessageProps) {
   const isUser = message.role === 'user';
   const [mapError, setMapError] = useState<string | null>(null);
-
-  // Filter and sort sources before rendering
-  const displaySources = filterAndSortSources(
-    message.sources || [],
-    message.citedIndices || []
-  );
 
   // Handle "View Map" action for OSIRIS worksite tool
   const handleViewMap = useCallback(async (worksiteId: string) => {
@@ -241,8 +193,13 @@ export function ChatMessage({ message, onOpenDocument }: ChatMessageProps) {
           </div>
         )}
 
-        {!isUser && displaySources.length > 0 && (
-          <SourcesList sources={displaySources} onOpenDocument={onOpenDocument} />
+        {/* Grouped sources with multi-chunk display */}
+        {!isUser && message.sources && message.sources.length > 0 && (
+          <GroupedSourcesList
+            sources={message.sources}
+            citedIndices={message.citedIndices}
+            onOpenDocument={onOpenDocument}
+          />
         )}
       </Card>
 

@@ -37,12 +37,24 @@ export interface Source {
   // Worksite map support (OSIRIS tool)
   geometry?: WorksiteGeometry;
   worksiteInfo?: WorksiteInfo;
+  // Multi-chunk support: all chunks from same document
+  allChunks?: Source[];      // When opening from grouped view, contains all chunks
+}
+
+// Grouped sources for multi-chunk display per document
+export interface GroupedSource {
+  documentPath: string;      // Unique identifier (path)
+  title: string;             // Document title
+  url?: string;              // Original URL if web source
+  maxSimilarity: number;     // Highest chunk similarity (for sorting)
+  chunks: Source[];          // All chunks from this document, sorted by similarity
 }
 
 export interface ToolCallMetadata {
   tool_name: string;
   tool_args: Record<string, unknown>;
   execution_time_ms?: number;
+  tool_result?: string;  // Raw JSON result from tool (for debug display)
 }
 
 export interface ChatMessage {
@@ -58,6 +70,7 @@ export interface ChatRequest {
   message: string;
   session_id?: string;
   model?: string;
+  agent_id?: string;  // Agent to use (e.g., 'rag', 'weather')
 }
 
 export interface StreamEvent {
@@ -68,4 +81,5 @@ export interface StreamEvent {
   tool_name?: string;
   tool_args?: Record<string, unknown>;
   execution_time_ms?: number;
+  tool_result?: string;  // Raw JSON result for debug display
 }

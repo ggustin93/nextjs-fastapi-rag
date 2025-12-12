@@ -74,6 +74,7 @@ export async function streamChat(
               event.tool_name = parsed.tool_name;
               event.tool_args = parsed.tool_args;
               event.execution_time_ms = parsed.execution_time_ms;
+              event.tool_result = parsed.tool_result;
             }
 
             onEvent(event);
