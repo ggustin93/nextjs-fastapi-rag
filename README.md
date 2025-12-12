@@ -42,6 +42,7 @@ A domain-agnostic RAG (Retrieval-Augmented Generation) starter for building docu
 - **Source Citations** - Every response includes ranked document sources
 - **Multi-Provider LLM** - OpenAI, Ollama, or any OpenAI-compatible API
 - **Domain-Agnostic** - Works generically or with optional domain configuration
+- **Multi-Agent** - Switchable agents with `@mention` syntax
 - **Extensible** - Add external API tools following clean patterns
 
 ## 2. Tech Stack
@@ -208,12 +209,15 @@ graph LR
 nextjs-fastapi-rag/
 ├── packages/                   # Shared Python packages (pip install -e .)
 │   ├── core/                   # RAG agent, CLI
-│   │   ├── config/             # Optional domain configuration
+│   │   ├── agents/             # Multi-agent system (registry, switcher)
 │   │   └── tools/              # External API tool patterns
 │   ├── ingestion/              # Docling chunker, embedder
 │   ├── scraper/                # Crawl4AI web scraper
 │   ├── config/                 # Centralized settings
 │   └── utils/                  # DB client, cache, providers
+├── config/                     # Runtime configuration
+│   ├── prompts/                # System prompts (*.txt)
+│   └── stopwords.json          # Search stopwords
 ├── services/
 │   ├── api/                    # FastAPI backend (see below)
 │   └── web/                    # Next.js frontend (see below)
@@ -504,20 +508,25 @@ See `packages/core/tools/weather_tool.py` for a complete implementation example.
 
 ### 9.3 Agent Configuration
 
-Create custom agent instances using the factory pattern:
+Agents are switchable at runtime via `@mention` or API:
 
 ```python
-from packages.core.factory import create_rag_agent
+# packages/core/agents/
+from packages.core.agents import AgentConfig, register_agent
 
-# Default configuration
-agent = create_rag_agent()
-
-# Custom configuration
-agent = create_rag_agent(
-    system_prompt="Custom instructions",
-    enabled_tools=["weather"]  # or [] for search only
+MY_AGENT = AgentConfig(
+    id="my_agent",
+    name="My Agent",
+    icon="🤖",
+    system_prompt="You are...",
+    enabled_tools=["search_knowledge_base"],  # or None for all
 )
+register_agent(MY_AGENT)
 ```
+
+**Usage**:
+- Chat: `@weather Météo à Bruxelles?`
+- API: `POST /agents/switch/weather`
 
 The factory ensures consistent configuration across CLI, API, and tests.
 
