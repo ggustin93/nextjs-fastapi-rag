@@ -64,9 +64,9 @@ data/raw/documents/**/*.*
 !data/raw/documents/**/README.md
 data/raw/notes/*.*
 !data/raw/notes/README.md
-data/processed/scraped/**/*.md
+# Scraped content - ignore all subdirectories and their contents
+data/processed/scraped/*/
 !data/processed/scraped/README.md
-!data/processed/scraped/**/.gitkeep
 # Config files (track examples, ignore actual - located in config/ at root)
 config/prompts/*.txt
 config/stopwords.json
