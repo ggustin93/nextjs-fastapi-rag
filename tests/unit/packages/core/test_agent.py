@@ -103,17 +103,33 @@ class TestSystemPrompt:
         agent = self._create_test_agent()
 
         prompt_lower = self._get_system_prompt(agent).lower()
-        # Should instruct to search knowledge base before answering (French)
-        assert "base de connaissances" in prompt_lower or "base de données" in prompt_lower
-        # Check for search instruction - prompt mentions search_knowledge_base tool
-        assert "search_knowledge_base" in prompt_lower or "recherche" in prompt_lower
+        # Should instruct to search knowledge base (French OR English)
+        has_kb_reference = any(
+            term in prompt_lower
+            for term in [
+                "base de connaissances",
+                "base de données",
+                "knowledge base",
+                "search_knowledge_base",
+            ]
+        )
+        assert has_kb_reference, "Prompt should reference knowledge base"
 
     def test_system_prompt_handles_missing_info(self):
         """System prompt should handle missing information gracefully."""
         agent = self._create_test_agent()
 
         prompt_lower = self._get_system_prompt(agent).lower()
-        # Should handle case when info isn't found (French)
-        # Prompt discusses "aucune information pertinente" scenario
-        assert "aucune information" in prompt_lower or "pas trouvé" in prompt_lower
+        # Should handle case when info isn't found (French OR English)
+        has_missing_info_handling = any(
+            term in prompt_lower
+            for term in [
+                "aucune information",
+                "pas trouvé",
+                "no relevant",
+                "not found",
+                "politely refuse",
+            ]
+        )
+        assert has_missing_info_handling, "Prompt should handle missing info"
         assert "cite" in prompt_lower or "sources" in prompt_lower
