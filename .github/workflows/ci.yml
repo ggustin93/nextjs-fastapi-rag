@@ -15,7 +15,7 @@ jobs:
   backend:
     name: Backend
     runs-on: ubuntu-latest
-    # environment: MyPROD  # Uncomment if using GitHub Environments
+    environment: MyPROD
     steps:
       - uses: actions/checkout@v4
 
