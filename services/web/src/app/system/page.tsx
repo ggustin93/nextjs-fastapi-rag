@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import { ChevronDown, FileText, Globe, Database, Zap, ArrowLeft, ExternalLink, Search, Sparkles } from 'lucide-react';
+import { ChevronDown, FileText, Globe, Database, Zap, ArrowLeft, ExternalLink, Search } from 'lucide-react';
 import Link from 'next/link';
 
 interface SystemConfig {
@@ -41,40 +41,54 @@ function formatSize(bytes: number): string {
 }
 
 // Stat card
-function StatCard({ value, label, loading }: { value: number | string; label: string; loading?: boolean }) {
+function StatCard({ value, label }: { value: number | string; label: string }) {
   return (
     <div className="bg-white rounded-lg px-4 py-3 border border-slate-200">
-      <div className="text-xl font-semibold text-slate-800">
-        {loading ? <span className="text-slate-400">...</span> : value}
-      </div>
+      <div className="text-xl font-semibold text-slate-800">{value}</div>
       <div className="text-xs text-slate-500 uppercase">{label}</div>
     </div>
   );
 }
 
-// Mermaid diagram
+// Mermaid diagram with loading state
 function MermaidDiagram({ chart }: { chart: string }) {
   const ref = useRef<HTMLDivElement>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
+
     const loadMermaid = async () => {
       const mermaid = (await import('mermaid')).default;
       mermaid.initialize({ startOnLoad: false, theme: 'neutral', themeVariables: { fontSize: '14px' } });
 
-      if (ref.current) {
+      if (ref.current && !cancelled) {
         try {
           ref.current.innerHTML = '';
           const { svg } = await mermaid.render(`mermaid-${Date.now()}`, chart);
-          ref.current.innerHTML = svg;
+          if (!cancelled) {
+            ref.current.innerHTML = svg;
+            setIsLoading(false);
+          }
         } catch (error) {
           console.error('Mermaid error:', error);
+          if (!cancelled) setIsLoading(false);
         }
       }
     };
     loadMermaid();
+
+    return () => { cancelled = true; };
   }, [chart]);
 
-  return <div ref={ref} className="flex justify-center" />;
+  return (
+    <div className="flex justify-center min-h-[120px] items-center">
+      {isLoading && (
+        <div className="text-sm text-slate-400 animate-pulse">Loading diagram...</div>
+      )}
+      <div ref={ref} className={isLoading ? 'hidden' : ''} />
+    </div>
+  );
 }
 
 // Collapsible section
@@ -180,12 +194,25 @@ export default function SystemPage() {
           <p className="text-sm text-slate-600">Documents and websites indexed in the knowledge base</p>
         </div>
 
-        {/* Stats */}
+        {/* Stats - skeleton loading */}
         <div className="grid grid-cols-4 gap-3 mb-6">
-          <StatCard value={pdfDocs.length} label="Documents" loading={loading} />
-          <StatCard value={webSources.length} label="Websites" loading={loading} />
-          <StatCard value={totalPages} label="Web Pages" loading={loading} />
-          <StatCard value={config?.llm.model?.split('/').pop() || '...'} label="LLM" loading={!config} />
+          {loading ? (
+            <>
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="bg-white rounded-lg px-4 py-3 border border-slate-200 animate-pulse">
+                  <div className="h-6 bg-slate-200 rounded w-12 mb-1" />
+                  <div className="h-3 bg-slate-100 rounded w-16" />
+                </div>
+              ))}
+            </>
+          ) : (
+            <>
+              <StatCard value={pdfDocs.length} label="Documents" />
+              <StatCard value={webSources.length} label="Websites" />
+              <StatCard value={totalPages} label="Web Pages" />
+              <StatCard value={config?.llm.model?.split('/').pop() || '-'} label="LLM" />
+            </>
+          )}
         </div>
 
         {/* Sections */}
@@ -437,19 +464,14 @@ export default function SystemPage() {
                 </div>
               </div>
 
-              {/* Best practices callout */}
-              <div className="bg-linear-to-r from-amber-50 to-pink-50 rounded-lg p-4 border border-amber-200">
-                <div className="flex items-start gap-3">
-                  <Sparkles className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-                  <div>
-                    <h4 className="font-medium text-slate-800 text-sm mb-1">RAG Best Practices 2024</h4>
-                    <p className="text-xs text-slate-600">
-                      <strong>Query Expansion</strong> improves recall by adding domain synonyms (vocabulary mismatch fix).
-                      <strong> Title Reranking</strong> improves precision by boosting documents whose titles match query keywords.
-                      Combined with RRF hybrid search, this pipeline maximizes both recall and precision.
-                    </p>
-                  </div>
-                </div>
+              {/* Pipeline rationale */}
+              <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                <p className="text-sm text-slate-600">
+                  <span className="font-medium text-slate-700">Why this pipeline?</span>{' '}
+                  Query expansion addresses vocabulary mismatch (user terms ≠ document terms).
+                  Title reranking boosts precision when document titles match query keywords.
+                  RRF fusion combines semantic and lexical signals without manual weight tuning.
+                </p>
               </div>
 
               {/* Formula */}
