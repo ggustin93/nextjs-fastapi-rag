@@ -291,15 +291,16 @@ class SearchConfig:
 
     default_limit: int = field(default_factory=lambda: int(os.getenv("SEARCH_DEFAULT_LIMIT", "30")))
     max_limit: int = field(default_factory=lambda: int(os.getenv("SEARCH_MAX_LIMIT", "100")))
-    # Lowered from 0.4 to 0.25 - catches more relevant chunks including definitions
-    # See docs/TROUBLESHOOT.md for evidence
+    # Raised from 0.25 to 0.30 - prevents hallucination on low-quality chunks
+    # Values below 0.25 significantly increase hallucination risk
     similarity_threshold: float = field(
-        default_factory=lambda: float(os.getenv("SEARCH_SIMILARITY_THRESHOLD", "0.25"))
+        default_factory=lambda: float(os.getenv("SEARCH_SIMILARITY_THRESHOLD", "0.30"))
     )
     # Threshold for detecting out-of-scope questions
-    # If best result similarity is below this, the question is likely not covered by the KB
+    # If best result similarity is below this, tool returns HORS PÉRIMÈTRE refusal
+    # Values below 0.40 may let LLM hallucinate on low-quality results
     out_of_scope_threshold: float = field(
-        default_factory=lambda: float(os.getenv("OUT_OF_SCOPE_THRESHOLD", "0.40"))
+        default_factory=lambda: float(os.getenv("OUT_OF_SCOPE_THRESHOLD", "0.45"))
     )
     max_chunks_per_document: int = field(
         default_factory=lambda: int(os.getenv("MAX_CHUNKS_PER_DOCUMENT", "5"))

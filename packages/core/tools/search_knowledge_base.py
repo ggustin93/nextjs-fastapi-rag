@@ -248,7 +248,13 @@ async def search_knowledge_base(
 
         if max_similarity < settings.search.out_of_scope_threshold:
             logger.warning(f"Low relevance results - max similarity: {max_similarity:.2f}")
-            return f"⚠️ PERTINENCE FAIBLE: Les résultats trouvés ont une pertinence maximale de {int(max_similarity * 100)}%, ce qui suggère que cette question est probablement HORS DU PÉRIMÈTRE de la base de connaissances."
+            return (
+                f"❌ QUESTION HORS PÉRIMÈTRE (score max: {int(max_similarity * 100)}%)\n\n"
+                "La base de connaissances ne contient PAS d'information pertinente sur ce sujet.\n"
+                "Tu DOIS répondre que cette question est hors de ton périmètre d'expertise.\n"
+                "N'INVENTE RIEN - refuse poliment en expliquant que tu ne peux répondre qu'aux questions "
+                "sur les chantiers, travaux de voirie et permis d'urbanisme à Bruxelles."
+            )
 
         # Build response with sources
         response_parts = []

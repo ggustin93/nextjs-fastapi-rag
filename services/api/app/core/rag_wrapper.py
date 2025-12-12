@@ -216,19 +216,24 @@ async def stream_agent_response(
 
                 all_messages = result.all_messages()
 
+                # BUG FIX: Only process NEW messages from this turn
+                # Skip messages that were already in history to avoid showing
+                # tool calls from previous agents (e.g., weather tool after switch to RAG)
+                new_messages = all_messages[len(message_history) :]
+
                 # Collect tool calls with their results
                 tool_calls_with_results: list[dict] = []
                 tool_results_by_id: dict[str, str] = {}
 
                 # First pass: collect all tool results by tool_call_id
-                for msg in all_messages:
+                for msg in new_messages:
                     if isinstance(msg, ModelRequest):
                         for part in msg.parts:
                             if isinstance(part, ToolReturnPart):
                                 tool_results_by_id[part.tool_call_id] = part.content
 
                 # Second pass: collect tool calls and match with results
-                for msg in all_messages:
+                for msg in new_messages:
                     if isinstance(msg, ModelResponse):
                         for part in msg.parts:
                             if isinstance(part, ToolCallPart):
