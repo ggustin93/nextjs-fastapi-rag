@@ -11,12 +11,14 @@ data/
 │   │   ├── BusinessAnalysis/ # Business & functional analysis
 │   │   ├── Slides/           # Training presentations
 │   │   └── UserGuides/       # User documentation
-│   └── notes/                # Custom markdown notes
+│   ├── notes/                # Custom markdown notes
+│   └── web/                  # Web scraper configuration
+│       └── sources.yaml      # Scraper sources config
 ├── processed/                # Generated/processed content
 │   └── scraped/              # Web scraper output
-├── config/                   # Configuration files
-│   └── sources.yaml          # Scraper sources config
 └── examples/                 # Tutorial examples (tracked in git)
+
+Note: Prompts and NLP config are in /config/ at project root.
 ```
 
 ## Data Flow
@@ -72,7 +74,7 @@ cp my-notes.md data/raw/notes/
 Web scraper outputs to `data/processed/scraped/`:
 
 ```bash
-make scrape  # Uses config from data/config/sources.yaml
+make scrape  # Uses config from data/raw/web/sources.yaml
 ```
 
 ### Ingestion
@@ -104,6 +106,8 @@ make ingest  # Runs 3-step pipeline: documents → notes → scraped
 |-----------|--------|-------|
 | `data/raw/documents/` | gitignored | Local docs, README tracked |
 | `data/raw/notes/` | gitignored | Local notes, README tracked |
+| `data/raw/web/sources.yaml` | gitignored | Domain-specific scraper config |
 | `data/processed/` | gitignored | Generated output |
-| `data/config/sources.yaml` | gitignored | Domain-specific config |
 | `data/examples/` | **tracked** | Tutorials |
+| `config/prompts/` | gitignored | Prompts (examples tracked) |
+| `config/stopwords.json` | gitignored | NLP config |

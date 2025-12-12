@@ -25,7 +25,7 @@ from typing import Optional
 
 from openai import AsyncOpenAI
 
-from packages.config import settings
+from packages.config import PROJECT_ROOT, settings
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +61,7 @@ class LLMQueryExpander(QueryExpander):
 
     Prompt file location (in order of priority):
     1. QUERY_EXPANSION_PROMPT_FILE env var
-    2. data/prompts/query_expansion.txt
+    2. config/prompts/query_expansion.txt
     3. Built-in default prompt
     """
 
@@ -106,7 +106,7 @@ Enriched reformulation:"""
         Search order:
         1. Explicit prompt_file parameter
         2. QUERY_EXPANSION_PROMPT_FILE env var
-        3. data/prompts/query_expansion.txt (relative to project root)
+        3. config/prompts/query_expansion.txt (absolute path via PROJECT_ROOT)
         4. Default built-in prompt
         """
         if self._prompt_template:
@@ -123,8 +123,8 @@ Enriched reformulation:"""
         if env_path:
             prompt_paths.append(Path(env_path))
 
-        # Try default location
-        prompt_paths.append(Path("data/prompts/query_expansion.txt"))
+        # Try default location (absolute path for resilience)
+        prompt_paths.append(PROJECT_ROOT / "config" / "prompts" / "query_expansion.txt")
 
         for path in prompt_paths:
             if path.exists():

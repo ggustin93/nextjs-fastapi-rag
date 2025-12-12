@@ -6,6 +6,8 @@ from typing import Any
 import yaml
 from pydantic import BaseModel, Field, HttpUrl
 
+from packages.config import PROJECT_ROOT
+
 
 class SelectorConfig(BaseModel):
     """CSS selectors for content extraction."""
@@ -67,8 +69,8 @@ class SourceConfig(BaseModel):
 class CrawlerConfig(BaseModel):
     """Global crawler configuration."""
 
-    # Output settings
-    output_dir: Path = Path("data/processed/scraped")
+    # Output settings (absolute path for resilience when running from different directories)
+    output_dir: Path = PROJECT_ROOT / "data" / "processed" / "scraped"
 
     # Default rate limiting
     default_rate_limit: RateLimitConfig = Field(default_factory=RateLimitConfig)

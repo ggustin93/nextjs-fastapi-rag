@@ -29,6 +29,9 @@ from typing import List, Optional, Union  # noqa: E402
 
 from packages.utils.prompt_loader import load_prompt  # noqa: E402
 
+# Project root is 2 levels up from packages/config/__init__.py
+PROJECT_ROOT = Path(__file__).parent.parent.parent.resolve()
+
 
 def _get_clean_env(key: str, default: Optional[str] = None) -> Optional[str]:
     """Get environment variable with validation and comment stripping.
@@ -71,7 +74,7 @@ def _get_clean_env(key: str, default: Optional[str] = None) -> Optional[str]:
     return value
 
 
-# Minimal fallback system prompt (full prompt loaded from data/prompts/system_prompt.txt)
+# Minimal fallback system prompt (full prompt loaded from config/prompts/system_prompt.txt)
 # This is only used if no custom prompt file is found
 DEFAULT_SYSTEM_PROMPT_FALLBACK = """You are a knowledge base assistant.
 
@@ -87,7 +90,7 @@ RULES:
 - Cite sources with [1], [2], etc.
 - If no relevant results, politely refuse
 
-For detailed customization, create: data/prompts/system_prompt.txt"""
+For detailed customization, create: config/prompts/system_prompt.txt"""
 
 
 def _load_system_prompt() -> str:
@@ -96,7 +99,7 @@ def _load_system_prompt() -> str:
     Search order:
     1. RAG_SYSTEM_PROMPT env var (full content)
     2. RAG_SYSTEM_PROMPT_FILE env var (file path)
-    3. data/prompts/system_prompt.txt (default location)
+    3. config/prompts/system_prompt.txt (default location)
     4. Built-in minimal fallback
     """
     return load_prompt(
@@ -104,7 +107,7 @@ def _load_system_prompt() -> str:
         prompt_name="system_prompt",
         env_var_content="RAG_SYSTEM_PROMPT",
         env_var_file="RAG_SYSTEM_PROMPT_FILE",
-        default_path=Path("data/prompts/system_prompt.txt"),
+        default_path=PROJECT_ROOT / "config" / "prompts" / "system_prompt.txt",
     )
 
 
@@ -476,4 +479,5 @@ __all__ = [
     "OsirisWorksiteConfig",
     "get_settings",
     "settings",
+    "PROJECT_ROOT",
 ]
