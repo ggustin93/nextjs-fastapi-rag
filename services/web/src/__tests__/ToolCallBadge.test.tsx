@@ -26,7 +26,7 @@ describe('ToolCallBadge', () => {
 
     expect(screen.getByText('Weather API')).toBeInTheDocument();
     expect(screen.getByText('🌤️')).toBeInTheDocument();
-    expect(screen.getByText('150ms')).toBeInTheDocument();
+    expect(screen.getByText('Retrieved real-time weather data')).toBeInTheDocument();
   });
 
   it('should render knowledge search tool badge', () => {
@@ -42,7 +42,7 @@ describe('ToolCallBadge', () => {
 
     expect(screen.getByText('Knowledge Search')).toBeInTheDocument();
     expect(screen.getByText('📚')).toBeInTheDocument();
-    expect(screen.getByText('200ms')).toBeInTheDocument();
+    expect(screen.getByText('Searched internal knowledge base')).toBeInTheDocument();
   });
 
   it('should render multiple tool call badges', () => {
@@ -63,6 +63,8 @@ describe('ToolCallBadge', () => {
 
     expect(screen.getByText('Weather API')).toBeInTheDocument();
     expect(screen.getByText('Knowledge Search')).toBeInTheDocument();
+    // Should show total tools count when multiple
+    expect(screen.getByText('2 tools used')).toBeInTheDocument();
   });
 
   it('should show expandable tool arguments on click', () => {
@@ -80,22 +82,25 @@ describe('ToolCallBadge', () => {
     expect(badge).toBeInTheDocument();
 
     // Initially, parameters should not be visible
-    expect(screen.queryByText('Parameters')).not.toBeInTheDocument();
+    expect(screen.queryByText(/location:/)).not.toBeInTheDocument();
 
     // Click to expand
     fireEvent.click(badge!);
-    expect(screen.getByText('Parameters')).toBeInTheDocument();
 
-    // Parameters should contain the tool args
+    // Parameters should contain the tool args (displayed as key: value)
     expect(screen.getByText(/location/)).toBeInTheDocument();
     expect(screen.getByText(/include_forecast/)).toBeInTheDocument();
+    expect(screen.getByText(/London/)).toBeInTheDocument();
 
     // Click again to collapse
     fireEvent.click(badge!);
-    expect(screen.queryByText('Parameters')).not.toBeInTheDocument();
+    expect(screen.queryByText(/location:/)).not.toBeInTheDocument();
   });
 
   it('should handle unknown tool names gracefully', () => {
+    // Suppress console.warn for this test
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
     const toolCalls: ToolCallMetadata[] = [
       {
         tool_name: 'unknown_tool',
@@ -110,6 +115,8 @@ describe('ToolCallBadge', () => {
     expect(screen.getByText('Tool')).toBeInTheDocument();
     // Should show a generic tool icon
     expect(screen.getByText('🔧')).toBeInTheDocument();
+
+    warnSpy.mockRestore();
   });
 
   it('should handle tool calls without execution time', () => {
@@ -123,8 +130,7 @@ describe('ToolCallBadge', () => {
     render(<ToolCallBadge toolCalls={toolCalls} />);
 
     expect(screen.getByText('Weather API')).toBeInTheDocument();
-    // Should not show execution time
-    expect(screen.queryByText(/\d+ms/)).not.toBeInTheDocument();
+    expect(screen.getByText('Retrieved real-time weather data')).toBeInTheDocument();
   });
 
   it('should handle tool calls with empty arguments', () => {
@@ -141,10 +147,45 @@ describe('ToolCallBadge', () => {
     const badge = screen.getByText('Weather API').closest('button');
     expect(badge).toBeInTheDocument();
 
-    // Click to try expanding
+    // Click to try expanding - should not have expandable content for empty args
     fireEvent.click(badge!);
 
-    // Should not show expandable parameters for empty args
-    expect(screen.queryByText('Parameters')).not.toBeInTheDocument();
+    // Should not show any parameter keys since args are empty
+    expect(screen.queryByRole('definition')).not.toBeInTheDocument();
+  });
+
+  it('should group consecutive identical tool calls', () => {
+    const toolCalls: ToolCallMetadata[] = [
+      {
+        tool_name: 'search_knowledge_base',
+        tool_args: { query: 'first query' },
+      },
+      {
+        tool_name: 'search_knowledge_base',
+        tool_args: { query: 'second query' },
+      },
+    ];
+
+    render(<ToolCallBadge toolCalls={toolCalls} />);
+
+    // Should show ×2 badge for grouped calls
+    expect(screen.getByText('×2')).toBeInTheDocument();
+    // Should only have one Knowledge Search card
+    expect(screen.getAllByText('Knowledge Search')).toHaveLength(1);
+  });
+
+  it('should render OSIRIS worksite tool badge', () => {
+    const toolCalls: ToolCallMetadata[] = [
+      {
+        tool_name: 'get_worksite_info',
+        tool_args: { worksite_id: '12345' },
+      },
+    ];
+
+    render(<ToolCallBadge toolCalls={toolCalls} />);
+
+    expect(screen.getByText('OSIRIS API')).toBeInTheDocument();
+    expect(screen.getByText('🚧')).toBeInTheDocument();
+    expect(screen.getByText('Retrieved Brussels worksite data')).toBeInTheDocument();
   });
 });
