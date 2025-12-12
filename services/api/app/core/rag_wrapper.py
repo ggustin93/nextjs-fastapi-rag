@@ -6,6 +6,7 @@ pool exhaustion.
 
 Architecture:
 - Singleton agent: Reused across all requests (stateless)
+- Agent switcher: Manages multiple agents with @mention support (e.g., @weather, @rag)
 - Singleton db_client: Shared connection pool
 - Singleton embedder: Shared OpenAI client
 - Per-request RAGContext: Wraps singletons with request-specific mutable state
@@ -157,9 +158,22 @@ async def stream_agent_response(
 
         logger.info("RAG context initialized with shared singleton resources")
 
-        # Use singleton agent or create new agent with model override
+        # Parse @agent mention and get appropriate agent
+        # Example: "@weather Météo Paris?" → agent_id="weather", clean_message="Météo Paris?"
+        agent_id = None
+        clean_message = message
+        if app_state.agent_switcher:
+            agent_id, clean_message = app_state.agent_switcher.parse_agent_mention(message)
+            if agent_id:
+                logger.info(f"🔀 Agent switch detected: @{agent_id}")
+
+        # Use singleton agent or create new agent with model/agent override
         effective_model = model if model else settings.llm.model
-        if model and model != settings.llm.model:
+        if agent_id and app_state.agent_switcher:
+            # Use agent from switcher (cached or creates new)
+            rag_agent = app_state.agent_switcher.switch_to(agent_id)
+            logger.info(f"🤖 Using agent: {agent_id}")
+        elif model and model != settings.llm.model:
             logger.info(f"Using model override: {model}")
             rag_agent = create_rag_agent(model=model)
         else:
@@ -171,12 +185,16 @@ async def stream_agent_response(
         if session_id:
             message_history = get_message_history(session_id, model=effective_model)
 
-        logger.info(f"🚀 Agent run: '{message[:50]}...' (history: {len(message_history)} msgs)")
+        agent_label = f"@{agent_id}" if agent_id else "default"
+        logger.info(
+            f"🚀 Agent run ({agent_label}): '{clean_message[:50]}...' (history: {len(message_history)} msgs)"
+        )
 
         # Run agent with streaming and message history
+        # Use clean_message (without @agent prefix) for the actual query
         async with asyncio.timeout(STREAM_TIMEOUT_SECONDS):
             async with rag_agent.run_stream(
-                message, message_history=message_history, deps=rag_context
+                clean_message, message_history=message_history, deps=rag_context
             ) as result:
                 # Stream tokens as they arrive
                 async for text in result.stream_text(delta=True):
@@ -188,23 +206,47 @@ async def stream_agent_response(
                         session_id, result.all_messages(), model=effective_model
                     )
 
-                # Extract tool calls from ModelResponse parts (pydantic-ai structure)
-                from pydantic_ai.messages import ModelResponse, ToolCallPart
+                # Extract tool calls and their results from pydantic-ai messages
+                from pydantic_ai.messages import (
+                    ModelRequest,
+                    ModelResponse,
+                    ToolCallPart,
+                    ToolReturnPart,
+                )
 
                 all_messages = result.all_messages()
-                tool_call_parts = []
 
+                # Collect tool calls with their results
+                tool_calls_with_results: list[dict] = []
+                tool_results_by_id: dict[str, str] = {}
+
+                # First pass: collect all tool results by tool_call_id
+                for msg in all_messages:
+                    if isinstance(msg, ModelRequest):
+                        for part in msg.parts:
+                            if isinstance(part, ToolReturnPart):
+                                tool_results_by_id[part.tool_call_id] = part.content
+
+                # Second pass: collect tool calls and match with results
                 for msg in all_messages:
                     if isinstance(msg, ModelResponse):
                         for part in msg.parts:
                             if isinstance(part, ToolCallPart):
-                                tool_call_parts.append(part)
+                                tool_result = tool_results_by_id.get(part.tool_call_id)
+                                tool_calls_with_results.append(
+                                    {
+                                        "part": part,
+                                        "result": tool_result,
+                                    }
+                                )
 
-                if tool_call_parts:
-                    logger.info(f"🔧 Found {len(tool_call_parts)} tool call(s)")
+                if tool_calls_with_results:
+                    logger.info(f"🔧 Found {len(tool_calls_with_results)} tool call(s)")
 
-                for tool_part in tool_call_parts:
+                for tool_data in tool_calls_with_results:
                     try:
+                        tool_part = tool_data["part"]
+                        tool_result = tool_data["result"]
                         tool_name = tool_part.tool_name
                         tool_args = tool_part.args_as_dict() if tool_part.args else {}
 
@@ -213,6 +255,7 @@ async def stream_agent_response(
                             "type": "tool_call",
                             "tool_name": tool_name,
                             "tool_args": tool_args,
+                            "tool_result": tool_result,  # Include the result for debug display
                             "execution_time_ms": 150,
                         }
                     except Exception as tool_err:

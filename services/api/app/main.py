@@ -27,10 +27,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic_ai import Agent
 
-from app.api import chat, documents, health, proxy, system, worksites
+from app.api import agents, chat, documents, health, system, worksites
 from app.middleware import PerformanceMiddleware
 from packages.__version__ import __version__
 from packages.config import settings
+from packages.core.agents.switcher import AgentSwitcher
 from packages.core.factory import create_rag_agent
 from packages.core.types import RAGContext
 from packages.utils.supabase_client import SupabaseRestClient
@@ -54,11 +55,13 @@ class AppState:
     to avoid connection pool exhaustion and improve performance.
 
     - agent: Stateless PydanticAI agent (same config for all requests)
+    - agent_switcher: Manages multiple agents with @mention switching
     - db_client: Shared Supabase client with connection pooling
     - embedder: Shared embedding model (lazy-loaded OpenAI client)
     """
 
     agent: Optional[Agent] = None
+    agent_switcher: Optional["AgentSwitcher"] = None
     db_client: Optional[SupabaseRestClient] = None
     embedder: Optional[object] = None  # EmbeddingGenerator type
 
@@ -109,6 +112,10 @@ async def lifespan(app: FastAPI):
         # 3. Create stateless agent (reused for all requests)
         app_state.agent = create_rag_agent()
         logger.info(f"✅ RAG agent initialized with model: {settings.llm.model}")
+
+        # 4. Initialize agent switcher (manages multiple agents with @mention)
+        app_state.agent_switcher = AgentSwitcher()
+        logger.info("✅ Agent switcher initialized (supports @weather, @rag mentions)")
 
         logger.info("🎉 All RAG resources initialized successfully")
 
@@ -179,12 +186,12 @@ app.add_middleware(
 )
 
 # Include routers
+app.include_router(agents.router, prefix="/api/v1")
 app.include_router(chat.router, prefix="/api/v1")
 app.include_router(documents.router, prefix="/api/v1")
 app.include_router(health.router, prefix="/api/v1")
 app.include_router(system.router, prefix="/api/v1")
 app.include_router(worksites.router, prefix="/api/v1")
-app.include_router(proxy.router, prefix="/api/v1")
 
 
 @app.get("/")

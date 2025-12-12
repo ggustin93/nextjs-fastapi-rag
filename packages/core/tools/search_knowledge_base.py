@@ -13,11 +13,10 @@ import logging
 import re
 import unicodedata
 from functools import lru_cache
-from pathlib import Path
 
 from pydantic_ai import RunContext
 
-from packages.config import settings
+from packages.config import PROJECT_ROOT, settings
 from packages.core.query_expansion import expand_query
 from packages.core.types import RAGContext
 from packages.utils.prompt_loader import load_json_config
@@ -37,7 +36,7 @@ def _load_stopwords(language: str = "default") -> set[str]:
     """
     data = load_json_config(
         config_name="stopwords",
-        default_path=Path("data/config/stopwords.json"),
+        default_path=PROJECT_ROOT / "config" / "stopwords.json",
         env_var_file="STOPWORDS_FILE",
     )
 
@@ -98,7 +97,7 @@ def _extract_keywords(query: str, classifiers: list[str] | None = None) -> list[
         keywords.extend([f"{classifier} {p.upper()}" for p in patterns])
 
     # Extract other significant terms (words > 3 chars, not stopwords)
-    # Stopwords loaded from config file (data/config/stopwords.json)
+    # Stopwords loaded from config file (config/stopwords.json)
     stopwords = _load_stopwords()
     words = re.findall(r"\b[a-z]{4,}\b", normalized)
     keywords.extend([w for w in words if w not in stopwords])
@@ -184,7 +183,7 @@ async def search_knowledge_base(
         rag_ctx: RAGContext = ctx.deps
 
         # Expand query to handle vocabulary mismatch
-        # Uses configurable prompt from data/prompts/query_expansion.txt
+        # Uses configurable prompt from config/prompts/query_expansion.txt
         expanded_query = await expand_query(query)
 
         # Generate embedding for EXPANDED query for better retrieval
@@ -274,9 +273,9 @@ async def search_knowledge_base(
             # Build source object
             source_obj = {"title": doc_title, "path": doc_source, "similarity": similarity}
 
-            # Include content inline for non-PDF sources (avoids frontend fetch)
-            if not doc_source.lower().endswith(".pdf"):
-                source_obj["content"] = content
+            # Include content inline for ALL sources (enables chunk/full toggle)
+            # PDFs benefit from chunk preview + full document viewing
+            source_obj["content"] = content
 
             # Add page info for PDFs
             if page_start is not None:

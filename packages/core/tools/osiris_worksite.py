@@ -11,6 +11,7 @@ Features:
 - Basic authentication with configurable credentials
 """
 
+import json
 import logging
 from datetime import datetime, timedelta
 from typing import Optional
@@ -82,7 +83,12 @@ async def get_worksite_info(
                 seconds=ctx.deps.osiris_config.cache_ttl_seconds
             ):
                 logger.info(f"Worksite cache hit for {worksite_id}")
-                return cached_data["formatted"]
+                # Return JSON with both formatted and raw response
+                result = {
+                    "formatted": cached_data["formatted"],
+                    "raw_api_response": cached_data["raw"],
+                }
+                return json.dumps(result, ensure_ascii=False, default=str)
 
         config = ctx.deps.osiris_config
 
@@ -128,14 +134,21 @@ async def get_worksite_info(
             geometry_type=geometry.get("type") if geometry else None,
         )
 
-        # Format response
+        # Format response for LLM
         formatted = (
             f"Worksite {worksite_id}:\n"
             f"Status: {status}\n"
             f"Description: {label}\n"
             f"Planned period: {start_date} to {end_date}\n"
-            f"Affected roads: {roads}"
+            f"Affected roads: {roads}\n"
+            f"[Source: OSIRIS Brussels API - données officielles]"
         )
+
+        # Build result with both formatted text and raw API response
+        result = {
+            "formatted": formatted,
+            "raw_api_response": data,
+        }
 
         # Cache result
         _worksite_cache[cache_key] = (
@@ -144,7 +157,8 @@ async def get_worksite_info(
         )
 
         logger.info(f"Worksite data fetched for {worksite_id} ({language})")
-        return formatted
+        # Return JSON string containing both formatted text and raw API response
+        return json.dumps(result, ensure_ascii=False, default=str)
 
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 404:

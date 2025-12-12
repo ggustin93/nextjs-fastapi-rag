@@ -1,12 +1,9 @@
 """Tool registry for RAG agent.
 
-Core Tools (always available):
+Available Tools:
 - search_knowledge_base: Semantic search over knowledge base
-
-Optional Tools:
-- get_weather: Weather information via Open-Meteo API
-- get_worksite_info: Brussels worksite data via OSIRIS API
-- external_api_example: Template for custom API integrations
+- weather: Weather information via Open-Meteo API
+- osiris_worksite: Brussels worksite data via OSIRIS API
 """
 
 from packages.core.tools.osiris_worksite import get_worksite_info
@@ -27,34 +24,30 @@ def get_tools(enabled_tools: list[str] | None = None) -> list:
     Args:
         enabled_tools: List of tool names to enable.
                       If None, returns all available tools.
-                      If empty list, returns only search_knowledge_base.
+                      If list, returns ONLY the specified tools (strict isolation).
 
     Returns:
         List of tool functions
 
     Examples:
         >>> get_tools()  # All tools
-        [search_knowledge_base, get_weather]
+        [search_knowledge_base, get_weather, get_worksite_info]
 
-        >>> get_tools(["weather"])  # Only weather
-        [search_knowledge_base, get_weather]
+        >>> get_tools(["weather"])  # ONLY weather (strict isolation)
+        [get_weather]
 
-        >>> get_tools([])  # Only core search
-        [search_knowledge_base]
+        >>> get_tools(["search_knowledge_base", "osiris_worksite"])  # RAG tools only
+        [search_knowledge_base, get_worksite_info]
     """
-    # search_knowledge_base is always included (core functionality)
-    tools = [search_knowledge_base]
-
     if enabled_tools is None:
         # Default: all tools
-        tools.extend([get_weather, get_worksite_info])
-    else:
-        # Only specified tools
-        for tool_name in enabled_tools:
-            if tool_name in _AVAILABLE_TOOLS:
-                tool = _AVAILABLE_TOOLS[tool_name]
-                if tool not in tools:  # Avoid duplicates
-                    tools.append(tool)
+        return list(_AVAILABLE_TOOLS.values())
+
+    # Strict isolation: ONLY return explicitly enabled tools
+    tools = []
+    for tool_name in enabled_tools:
+        if tool_name in _AVAILABLE_TOOLS:
+            tools.append(_AVAILABLE_TOOLS[tool_name])
 
     return tools
 
