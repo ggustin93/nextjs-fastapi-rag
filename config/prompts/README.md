@@ -21,5 +21,5 @@ cp query_expansion.txt.example query_expansion.txt
 ## Loading Order
 
 1. Environment variable (`RAG_SYSTEM_PROMPT` / `QUERY_EXPANSION_PROMPT_FILE`)
-2. File in this directory (`data/prompts/*.txt`)
+2. File in this directory (`config/prompts/*.txt`)
 3. Built-in fallback in code

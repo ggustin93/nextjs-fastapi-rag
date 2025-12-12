@@ -64,11 +64,14 @@ data/raw/documents/**/*.*
 !data/raw/documents/**/README.md
 data/raw/notes/*.*
 !data/raw/notes/README.md
-data/processed/scraped/*.*
+data/processed/scraped/**/*.md
 !data/processed/scraped/README.md
-data/prompts/*.txt
-!data/prompts/*.txt.example
-!data/prompts/README.md
+!data/processed/scraped/**/.gitkeep
+# Config files (track examples, ignore actual - located in config/ at root)
+config/prompts/*.txt
+config/stopwords.json
+!config/prompts/*.txt.example
+!config/prompts/README.md
 
 # Scraper config (domain-specific, use sources.yaml.example as template)
 data/raw/web/sources.yaml
@@ -109,3 +112,5 @@ tests/golden_dataset.csv
 
 # Next.js public static assets (generated)
 services/web/public/*.svg
+
+claudedocs/
