@@ -15,7 +15,7 @@ jobs:
   backend:
     name: Backend
     runs-on: ubuntu-latest
-    environment: MyPROD
+    # Uses repository secrets (not environment secrets)
     steps:
       - uses: actions/checkout@v4
 
