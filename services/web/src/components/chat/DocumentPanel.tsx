@@ -26,9 +26,11 @@ export function DocumentPanel({ source, onClose }: DocumentPanelProps) {
               {source.page_range}
             </Badge>
           )}
-          <Badge variant="outline" className="ml-auto shrink-0">
-            Pertinence: {similarityPercent}%
-          </Badge>
+          {!source.path?.startsWith('worksite://') && (
+            <Badge variant="outline" className="ml-auto shrink-0">
+              Pertinence: {similarityPercent}%
+            </Badge>
+          )}
         </div>
         <Button
           variant="ghost"

@@ -137,7 +137,9 @@ export function DocumentViewer({ source, index, onOpenDocument }: DocumentViewer
           <SourceTypeIcon source={source} />
           <span className="truncate max-w-[200px]">{source.title}</span>
           {source.page_range && <Badge variant="outline" className="ml-1 text-[9px] px-1 py-0">{source.page_range}</Badge>}
-          <Badge variant="secondary" className="ml-1 text-[9px] px-1 py-0">{Math.round(source.similarity * 100)}%</Badge>
+          {!source.path?.startsWith('worksite://') && (
+            <Badge variant="secondary" className="ml-1 text-[9px] px-1 py-0">{Math.round(source.similarity * 100)}%</Badge>
+          )}
         </div>
         {source.url && (
           <a
