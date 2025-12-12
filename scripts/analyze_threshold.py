@@ -18,9 +18,9 @@ THRESHOLDS = [0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65]
 
 async def query_with_threshold(query: str, threshold: float) -> Dict:
     """Query RAG system and extract sources with similarity scores."""
-    print(f"\n{'='*80}")
+    print(f"\n{'=' * 80}")
     print(f"Testing threshold: {threshold}")
-    print(f"{'='*80}")
+    print(f"{'=' * 80}")
 
     # Update threshold in environment
     import os

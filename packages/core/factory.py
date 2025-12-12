@@ -1,6 +1,7 @@
 """Agent factory for consistent RAG agent creation."""
 
 import os
+
 from pydantic_ai import Agent
 
 from packages.config import settings
@@ -62,22 +63,24 @@ def create_rag_agent(
         # Route to correct provider based on model
         provider_name = MODEL_PROVIDERS.get(model, "openai")
         provider_config = PROVIDER_CONFIG.get(provider_name, PROVIDER_CONFIG["openai"])
-        
+
         base_url = provider_config["base_url"]
         api_key = os.getenv(provider_config["api_key_env"], "")
         supports_tools = provider_config.get("supports_tools", True)
-        
+
         # Only enable tools if provider supports them
         if supports_tools:
-            tools = get_tools(enabled_tools if enabled_tools is not None else settings.enabled_tools)
+            tools = get_tools(
+                enabled_tools if enabled_tools is not None else settings.enabled_tools
+            )
         else:
             tools = []  # No tools for providers that don't support function calling
-        
+
         if provider_name == "mistral":
             # Native Mistral support with proper tool calling
             from pydantic_ai.models.mistral import MistralModel
             from pydantic_ai.providers.mistral import MistralProvider
-            
+
             mistral_provider = MistralProvider(api_key=api_key)
             model_instance = MistralModel(model, provider=mistral_provider)
         elif base_url:

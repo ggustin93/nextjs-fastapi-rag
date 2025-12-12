@@ -3,7 +3,6 @@
 import os
 from unittest.mock import patch
 
-import pytest
 from pydantic_ai import Agent
 
 from packages.core.factory import (
@@ -12,7 +11,6 @@ from packages.core.factory import (
     create_rag_agent,
 )
 from packages.core.types import RAGContext
-
 
 # -----------------------------------------------------------------------------
 # Provider Configuration Tests

@@ -178,10 +178,14 @@ async def run_benchmark():
     print("\n" + "=" * 50)
     if total_h > total_v:
         print("🏆 WINNER: HYBRID SEARCH")
-        print(f"   Hybrid found {total_h - total_v} more keyword matches ({(total_h/total_kw)*100:.1f}% vs {(total_v/total_kw)*100:.1f}%)")
+        print(
+            f"   Hybrid found {total_h - total_v} more keyword matches ({(total_h / total_kw) * 100:.1f}% vs {(total_v / total_kw) * 100:.1f}%)"
+        )
     elif total_v > total_h:
         print("🏆 WINNER: VECTOR SEARCH")
-        print(f"   Vector found {total_v - total_h} more keyword matches ({(total_v/total_kw)*100:.1f}% vs {(total_h/total_kw)*100:.1f}%)")
+        print(
+            f"   Vector found {total_v - total_h} more keyword matches ({(total_v / total_kw) * 100:.1f}% vs {(total_h / total_kw) * 100:.1f}%)"
+        )
     else:
         print("🏆 TIE - Both approaches perform equally")
     print("=" * 50)
