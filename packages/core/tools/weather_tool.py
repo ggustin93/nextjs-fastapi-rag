@@ -8,6 +8,7 @@ Uses Open-Meteo API (unlimited, no API key required) with:
 - PydanticAI RunContext[RAGContext] pattern
 """
 
+import json
 import logging
 from datetime import datetime, timedelta
 
@@ -53,7 +54,12 @@ async def get_weather(
             config = WeatherConfig()
             if datetime.now() - cached_time < timedelta(seconds=config.cache_ttl_seconds):
                 logger.info(f"Weather cache hit for {location}")
-                return cached_data["formatted"]
+                return json.dumps(
+                    {
+                        "formatted": cached_data["formatted"],
+                        "raw_api_response": cached_data["raw"],
+                    }
+                )
 
         config = WeatherConfig()
 
@@ -109,7 +115,14 @@ async def get_weather(
         _weather_cache[cache_key] = ({"formatted": formatted, "raw": data}, datetime.now())
 
         logger.info(f"Weather fetched for {location}: {formatted}")
-        return formatted
+
+        # Return JSON with both formatted response and raw API data
+        return json.dumps(
+            {
+                "formatted": formatted,
+                "raw_api_response": data,
+            }
+        )
 
     except httpx.TimeoutException:
         logger.error(f"Weather API timeout for {location}")
