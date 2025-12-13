@@ -33,6 +33,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: false
+          swap-storage: true
+
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -81,3 +92,9 @@ jobs:
             NEXT_PUBLIC_API_URL=${{ steps.api-url.outputs.url }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Docker prune
+        if: always()
+        run: |
+          docker buildx prune -af
+          docker system prune -af --volumes
