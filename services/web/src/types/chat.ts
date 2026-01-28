@@ -17,6 +17,45 @@ export interface WorksiteInfo {
   pgm_end_date?: string;
 }
 
+// OTRS Ticket types for email thread visualization
+export interface TicketAttachment {
+  attachment_id: string;
+  filename: string;
+  content_type: string;
+  file_size?: number;
+}
+
+export interface TicketArticle {
+  article_id: string;
+  from_address?: string;
+  to_addresses: string[];
+  cc_addresses: string[];
+  subject?: string;
+  body: string;
+  body_type: string;         // text/plain or text/html
+  sender_type: 'customer' | 'agent' | 'system';
+  article_type?: string;     // email-external, email-internal, note-internal, phone, etc.
+  created?: string;
+  attachments: TicketAttachment[];
+}
+
+export interface TicketData {
+  ticket_id: string;
+  ticket_number: string;
+  title?: string;
+  state?: string;
+  priority?: string;
+  queue?: string;
+  customer_user?: string;
+  customer_email?: string;
+  owner?: string;
+  responsible?: string;
+  created?: string;
+  changed?: string;
+  articles: TicketArticle[];
+  web_url?: string;
+}
+
 export interface Source {
   title: string;
   path: string;
@@ -37,6 +76,8 @@ export interface Source {
   // Worksite map support (OSIRIS tool)
   geometry?: WorksiteGeometry;
   worksiteInfo?: WorksiteInfo;
+  // OTRS Ticket support
+  ticketData?: TicketData;   // Ticket data for thread visualization
   // Multi-chunk support: all chunks from same document
   allChunks?: Source[];      // When opening from grouped view, contains all chunks
 }
