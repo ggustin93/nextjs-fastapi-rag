@@ -104,4 +104,56 @@ class OsirisWorksiteConfig:
     timeout_seconds: int = field(default_factory=lambda: int(os.getenv("OSIRIS_TIMEOUT", "10")))
 
 
-__all__ = ["WeatherToolConfig", "OsirisWorksiteConfig"]
+@dataclass(frozen=True)
+class OTRSToolConfig:
+    """OTRS ticket system API configuration.
+
+    OTRS provides ticket data via GenericInterface REST API with session-based authentication.
+
+    Environment Variables:
+        OTRS_SERVER_URL: OTRS REST API base URL (required)
+            Example: "https://otrs.example.com/otrs/nph-genericinterface.pl/Webservice/GenericTicketConnectorREST"
+        OTRS_USERNAME: API username (required)
+        OTRS_PASSWORD: API password (required)
+        OTRS_CACHE_TTL: Cache TTL for ticket details in seconds (default: 900 = 15 minutes)
+        OTRS_SEARCH_CACHE_TTL: Cache TTL for search results in seconds (default: 300 = 5 minutes)
+        OTRS_TIMEOUT: API request timeout in seconds (default: 30)
+        OTRS_VERIFY_SSL: Whether to verify SSL certificates (default: "true")
+        OTRS_WEB_URL: Web interface URL for iframe viewing (optional, defaults to server base URL)
+            Example: "https://otrs.example.com"
+    """
+
+    server_url: Optional[str] = field(default_factory=lambda: _get_clean_env("OTRS_SERVER_URL"))
+    username: Optional[str] = field(default_factory=lambda: _get_clean_env("OTRS_USERNAME"))
+    password: Optional[str] = field(default_factory=lambda: _get_clean_env("OTRS_PASSWORD"))
+    cache_ttl_seconds: int = field(default_factory=lambda: int(os.getenv("OTRS_CACHE_TTL", "900")))
+    search_cache_ttl_seconds: int = field(
+        default_factory=lambda: int(os.getenv("OTRS_SEARCH_CACHE_TTL", "300"))
+    )
+    timeout_seconds: int = field(default_factory=lambda: int(os.getenv("OTRS_TIMEOUT", "30")))
+    verify_ssl: bool = field(
+        default_factory=lambda: os.getenv("OTRS_VERIFY_SSL", "true").lower() == "true"
+    )
+    web_url: Optional[str] = field(default_factory=lambda: _get_clean_env("OTRS_WEB_URL"))
+
+    @property
+    def is_configured(self) -> bool:
+        """Check if OTRS is properly configured with required credentials."""
+        return bool(self.server_url and self.username and self.password)
+
+    @property
+    def effective_web_url(self) -> Optional[str]:
+        """Get the web URL for iframe, falling back to server URL base."""
+        if self.web_url:
+            return self.web_url.rstrip("/")
+        if self.server_url:
+            # Extract base URL from REST API URL
+            # e.g., "https://otrs.example.com/otrs/nph-genericinterface.pl/..." -> "https://otrs.example.com"
+            from urllib.parse import urlparse
+
+            parsed = urlparse(self.server_url)
+            return f"{parsed.scheme}://{parsed.netloc}"
+        return None
+
+
+__all__ = ["WeatherToolConfig", "OsirisWorksiteConfig", "OTRSToolConfig"]

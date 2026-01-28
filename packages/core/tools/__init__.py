@@ -4,6 +4,8 @@ Available Tools:
 - search_knowledge_base: Semantic search over knowledge base
 - weather: Weather information via Open-Meteo API
 - osiris_worksite: Brussels worksite data via OSIRIS API (optional, proprietary)
+- otrs_search: Search OTRS tickets (optional, requires OTRS credentials)
+- otrs_ticket: Get OTRS ticket details (optional, requires OTRS credentials)
 """
 
 from packages.core.tools.search_knowledge_base import search_knowledge_base
@@ -22,6 +24,16 @@ try:
     _AVAILABLE_TOOLS["osiris_worksite"] = get_worksite_info
 except ImportError:
     get_worksite_info = None
+
+# OTRS tools are optional (requires OTRS server credentials)
+try:
+    from packages.core.tools.otrs_tool import get_otrs_ticket, search_otrs_tickets
+
+    _AVAILABLE_TOOLS["search_otrs_tickets"] = search_otrs_tickets
+    _AVAILABLE_TOOLS["get_otrs_ticket"] = get_otrs_ticket
+except ImportError:
+    search_otrs_tickets = None
+    get_otrs_ticket = None
 
 
 def get_tools(enabled_tools: list[str] | None = None) -> list:
@@ -82,3 +94,7 @@ __all__ = [
 # Add OSIRIS to exports if available
 if get_worksite_info is not None:
     __all__.append("get_worksite_info")
+
+# Add OTRS to exports if available
+if search_otrs_tickets is not None:
+    __all__.extend(["search_otrs_tickets", "get_otrs_ticket"])

@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from packages.config import OsirisWorksiteConfig, WeatherToolConfig
+from packages.config import OsirisWorksiteConfig, OTRSToolConfig, WeatherToolConfig
 from packages.utils.supabase_client import SupabaseRestClient
 
 # Alias for backward compatibility - WeatherToolConfig is the canonical version
@@ -23,5 +23,6 @@ class RAGContext:
     embedder: Optional[Any] = None  # Cached EmbeddingGenerator for query embedding
     weather_config: WeatherToolConfig = field(default_factory=WeatherToolConfig)
     osiris_config: OsirisWorksiteConfig = field(default_factory=OsirisWorksiteConfig)
+    otrs_config: OTRSToolConfig = field(default_factory=OTRSToolConfig)
     last_search_sources: list = field(default_factory=list)
     cited_source_indices: set[int] = field(default_factory=set)

@@ -62,6 +62,8 @@ def _register_builtin_agents() -> None:
         return
     # Import triggers registration via register_agent() calls
     from packages.core.agents import (
+        helpdesk_agent,  # noqa: F401
+        otrs_agent,  # noqa: F401
         rag_agent,  # noqa: F401
         weather_agent,  # noqa: F401
     )
