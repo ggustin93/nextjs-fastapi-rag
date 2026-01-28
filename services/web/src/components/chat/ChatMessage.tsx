@@ -1,14 +1,70 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
-import type { ChatMessage as ChatMessageType, Source } from '@/types/chat';
+import type { ChatMessage as ChatMessageType, Source, TicketData } from '@/types/chat';
 import { GroupedSourcesList } from './GroupedSourcesList';
 import { ToolCallBadge } from './ToolCallBadge';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+
+// Regex to match ticket numbers: #2025121610000123 or Ticket #2025121610000123
+const TICKET_NUMBER_REGEX = /(?:Ticket\s*)?#(\d{10,})/gi;
+
+// Component to render text with clickable ticket numbers
+interface TicketLinkTextProps {
+  children: string;
+  onTicketClick?: (ticketNumber: string) => void;
+}
+
+function TicketLinkText({ children, onTicketClick }: TicketLinkTextProps) {
+  if (typeof children !== 'string' || !onTicketClick) {
+    return <>{children}</>;
+  }
+
+  const parts: (string | JSX.Element)[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  // Reset regex state
+  TICKET_NUMBER_REGEX.lastIndex = 0;
+
+  while ((match = TICKET_NUMBER_REGEX.exec(children)) !== null) {
+    // Add text before match
+    if (match.index > lastIndex) {
+      parts.push(children.slice(lastIndex, match.index));
+    }
+
+    const ticketNumber = match[1]; // The captured group (digits only)
+    const fullMatch = match[0]; // The full match including "Ticket #" or just "#"
+
+    parts.push(
+      <button
+        key={`ticket-${match.index}`}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onTicketClick(ticketNumber);
+        }}
+        className="inline-flex items-center text-primary hover:underline font-medium cursor-pointer bg-transparent border-none p-0"
+        title={`Voir le ticket ${ticketNumber}`}
+      >
+        🎫 {fullMatch}
+      </button>
+    );
+
+    lastIndex = TICKET_NUMBER_REGEX.lastIndex;
+  }
+
+  // Add remaining text
+  if (lastIndex < children.length) {
+    parts.push(children.slice(lastIndex));
+  }
+
+  return <>{parts.length > 0 ? parts : children}</>;
+}
 
 interface ChatMessageProps {
   message: ChatMessageType;
@@ -18,6 +74,49 @@ interface ChatMessageProps {
 export function ChatMessage({ message, onOpenDocument }: ChatMessageProps) {
   const isUser = message.role === 'user';
   const [mapError, setMapError] = useState<string | null>(null);
+  const [ticketError, setTicketError] = useState<string | null>(null);
+
+  // Handle "View Ticket" action for OTRS ticket tool
+  const handleViewTicket = useCallback(async (ticketId: string, webUrl: string) => {
+    if (!onOpenDocument) return;
+
+    setTicketError(null);
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+
+    try {
+      // Fetch ticket data from API (includes articles for thread view)
+      const response = await fetch(`${baseUrl}/tickets/${ticketId}`);
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          setTicketError(`Ticket ${ticketId} not found`);
+          return;
+        }
+        throw new Error(`API error: ${response.status}`);
+      }
+
+      const ticketData: TicketData = await response.json();
+
+      // Create a Source with ticket data for DocumentPanel
+      const ticketSource: Source = {
+        title: `Ticket #${ticketData.ticket_number}`,
+        path: `ticket://${ticketId}`,
+        similarity: 1.0,
+        ticketData: ticketData,
+      };
+
+      onOpenDocument(ticketSource);
+    } catch (error) {
+      console.error('Failed to fetch ticket data:', error);
+      setTicketError('Failed to load ticket data');
+    }
+  }, [onOpenDocument]);
+
+  // Handle ticket click from inline text (just ticket number, no webUrl needed)
+  const handleTicketNumberClick = useCallback(async (ticketNumber: string) => {
+    // Use ticket number as ID - the backend now supports TicketNumber lookup
+    await handleViewTicket(ticketNumber, '');
+  }, [handleViewTicket]);
 
   // Handle "View Map" action for OSIRIS worksite tool
   const handleViewMap = useCallback(async (worksiteId: string) => {
@@ -93,10 +192,19 @@ export function ChatMessage({ message, onOpenDocument }: ChatMessageProps) {
             {message.content}
           </p>
         ) : (
-          <div className="prose prose-sm dark:prose-invert max-w-none">
+          <div className="prose prose-sm dark:prose-invert max-w-none text-foreground">
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               components={{
+                // Custom text renderer to make ticket numbers clickable
+                text: ({ node, ...rest }) => {
+                  const value = (node as { value?: string })?.value || '';
+                  return (
+                    <TicketLinkText onTicketClick={handleTicketNumberClick}>
+                      {value}
+                    </TicketLinkText>
+                  );
+                },
                 p: ({ node, children, ...rest }) => (
                   <p className="text-sm mb-2 last:mb-0" {...rest}>{children}</p>
                 ),
@@ -118,22 +226,22 @@ export function ChatMessage({ message, onOpenDocument }: ChatMessageProps) {
                 code: ({ node, children, className, ...rest }) => {
                   const isInline = !className;
                   return isInline ? (
-                    <code className="bg-background/50 px-1 py-0.5 rounded text-xs font-mono" {...rest}>
+                    <code className="bg-background/50 px-1 py-0.5 rounded text-xs font-mono text-foreground" {...rest}>
                       {children}
                     </code>
                   ) : (
-                    <code className="block bg-background/50 p-2 rounded text-xs font-mono overflow-x-auto" {...rest}>
+                    <code className="block text-xs font-mono text-foreground whitespace-pre-wrap break-words" {...rest}>
                       {children}
                     </code>
                   );
                 },
                 pre: ({ node, children, ...rest }) => (
-                  <pre className="bg-background/50 p-3 rounded-md overflow-x-auto mb-2" {...rest}>
+                  <pre className="bg-background/50 p-3 rounded-md mb-2 text-foreground whitespace-pre-wrap break-words font-sans text-sm" {...rest}>
                     {children}
                   </pre>
                 ),
                 blockquote: ({ node, children, ...rest }) => (
-                  <blockquote className="border-l-2 border-primary/50 pl-3 italic text-sm mb-2" {...rest}>
+                  <blockquote className="border-l-2 border-primary/50 pl-3 italic text-sm mb-2 text-foreground" {...rest}>
                     {children}
                   </blockquote>
                 ),
@@ -181,15 +289,26 @@ export function ChatMessage({ message, onOpenDocument }: ChatMessageProps) {
           </div>
         )}
 
-        {/* Tool Calls with View Map action */}
+        {/* Tool Calls with View Map and View Ticket actions */}
         {!isUser && message.toolCalls && message.toolCalls.length > 0 && (
-          <ToolCallBadge toolCalls={message.toolCalls} onViewMap={handleViewMap} />
+          <ToolCallBadge
+            toolCalls={message.toolCalls}
+            onViewMap={handleViewMap}
+            onViewTicket={handleViewTicket}
+          />
         )}
 
         {/* Map loading error display */}
         {mapError && (
           <div className="mt-2 px-3 py-2 bg-red-50 border border-red-200 rounded-md text-xs text-red-700">
             {mapError}
+          </div>
+        )}
+
+        {/* Ticket loading error display */}
+        {ticketError && (
+          <div className="mt-2 px-3 py-2 bg-red-50 border border-red-200 rounded-md text-xs text-red-700">
+            {ticketError}
           </div>
         )}
 

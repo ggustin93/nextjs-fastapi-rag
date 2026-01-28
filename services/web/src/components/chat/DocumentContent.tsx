@@ -9,6 +9,7 @@ import type { Source } from '@/types/chat';
 import { IframeViewer } from './IframeViewer';
 import { PdfViewer } from './PdfViewer';
 import { ChunkDocumentViewer } from './ChunkDocumentViewer';
+import { TicketViewer } from './TicketViewer';
 
 // Dynamic import for WorksiteMapViewer (Leaflet needs client-only)
 const WorksiteMapViewer = dynamic(
@@ -42,9 +43,21 @@ export function DocumentContent({ source }: { source: Source; showControls?: boo
       return;
     }
 
+    // Ticket data (OTRS): render TicketViewer directly, no fetch needed
+    if (source.ticketData) {
+      setIsLoading(false);
+      return;
+    }
+
     // Non-PDF with inline content: render directly without fetch
     if (!isPdf && source.content) {
       setMdContent(source.content);
+      setIsLoading(false);
+      return;
+    }
+
+    // URL-only sources (e.g., OTRS tickets): render iframe directly, no fetch needed
+    if (source.url && !source.content) {
       setIsLoading(false);
       return;
     }
@@ -93,7 +106,7 @@ export function DocumentContent({ source }: { source: Source; showControls?: boo
         URL.revokeObjectURL(currentBlobUrl);
       }
     };
-  }, [source.path, source.content, source.geometry, isPdf]);
+  }, [source.path, source.content, source.geometry, source.ticketData, source.url, isPdf]);
 
   // Renderers
   const isWebSource = Boolean(source.url);
@@ -106,6 +119,25 @@ export function DocumentContent({ source }: { source: Source; showControls?: boo
         geometry={source.geometry}
         worksiteInfo={source.worksiteInfo}
       />
+    );
+  }
+
+  // OTRS Ticket viewer (email thread UI)
+  if (source.ticketData) {
+    return <TicketViewer ticketData={source.ticketData} />;
+  }
+
+  // URL-only sources: iframe without markdown fallback
+  if (isWebSource && source.url && !mdContent && !source.content) {
+    return (
+      <div className="h-full">
+        <iframe
+          src={source.url}
+          className="w-full h-full border-0"
+          title={source.title}
+          sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
+        />
+      </div>
     );
   }
 

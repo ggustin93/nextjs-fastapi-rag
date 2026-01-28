@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import type { ToolCallMetadata } from '@/types/chat';
-import { ChevronDown, ChevronRight, Zap, Map, Code2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Zap, Map, Code2, ExternalLink } from 'lucide-react';
 
 // Tool metadata with enhanced visual identity
 const toolMetadata: Record<string, {
@@ -14,6 +14,7 @@ const toolMetadata: Record<string, {
   borderColor: string;
   iconBg: string;
   hasMapAction?: boolean;
+  hasTicketAction?: boolean;
 }> = {
   get_weather: {
     icon: '🌤️',
@@ -43,6 +44,25 @@ const toolMetadata: Record<string, {
     iconBg: 'bg-orange-100',
     hasMapAction: true,
   },
+  search_otrs_tickets: {
+    icon: '🎫',
+    displayName: 'OTRS Search',
+    description: 'Searched ticket system',
+    color: 'text-purple-700',
+    bgColor: 'bg-purple-50',
+    borderColor: 'border-purple-200',
+    iconBg: 'bg-purple-100',
+  },
+  get_otrs_ticket: {
+    icon: '📋',
+    displayName: 'OTRS Ticket',
+    description: 'Retrieved ticket details',
+    color: 'text-purple-700',
+    bgColor: 'bg-purple-50',
+    borderColor: 'border-purple-200',
+    iconBg: 'bg-purple-100',
+    hasTicketAction: true,
+  },
 };
 
 // Fallback for unknown tools
@@ -69,9 +89,10 @@ interface GroupedToolCall {
 interface ToolCallBadgeProps {
   toolCalls?: ToolCallMetadata[];
   onViewMap?: (worksiteId: string) => Promise<void>;
+  onViewTicket?: (ticketId: string, webUrl: string) => void;
 }
 
-export function ToolCallBadge({ toolCalls, onViewMap }: ToolCallBadgeProps) {
+export function ToolCallBadge({ toolCalls, onViewMap, onViewTicket }: ToolCallBadgeProps) {
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
   const [loadingMap, setLoadingMap] = useState<string | null>(null);
   // Track which tool responses are shown (by "groupIndex-callIndex")
@@ -139,6 +160,24 @@ export function ToolCallBadge({ toolCalls, onViewMap }: ToolCallBadgeProps) {
           (call) => call.tool_args?.worksite_id
         );
         const worksiteId = worksiteCall?.tool_args?.worksite_id as string | undefined;
+
+        // For OTRS ticket action, extract ticket_id and web_url from result
+        let ticketId: string | undefined;
+        let ticketWebUrl: string | undefined;
+        if (metadata.hasTicketAction) {
+          const ticketCall = group.allCalls.find(
+            (call) => call.tool_args?.ticket_id && call.tool_result
+          );
+          if (ticketCall) {
+            ticketId = String(ticketCall.tool_args.ticket_id);
+            try {
+              const parsed = JSON.parse(ticketCall.tool_result || '{}');
+              ticketWebUrl = parsed.web_url;
+            } catch {
+              // Ignore parse errors
+            }
+          }
+        }
 
         return (
           <div
@@ -217,6 +256,22 @@ export function ToolCallBadge({ toolCalls, onViewMap }: ToolCallBadgeProps) {
                   >
                     <Map className="w-3.5 h-3.5" />
                     {loadingMap === String(worksiteId) ? 'Loading...' : 'View Map'}
+                  </button>
+                )}
+
+                {/* View Ticket Action for OTRS ticket tool */}
+                {metadata.hasTicketAction && onViewTicket && ticketId && ticketWebUrl && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onViewTicket(ticketId!, ticketWebUrl!);
+                    }}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium
+                      transition-all duration-200
+                      bg-purple-100 text-purple-700 hover:bg-purple-200 hover:shadow-sm"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    View Ticket
                   </button>
                 )}
 

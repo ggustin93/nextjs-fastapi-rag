@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
-import { ChevronDown, FileText, Globe, Database, Zap, ArrowLeft, ExternalLink, Search } from 'lucide-react';
+import { useEffect, useState, useRef, useCallback } from 'react';
+import { ChevronDown, FileText, Globe, Database, Zap, ArrowLeft, ExternalLink, Search, Maximize2, X } from 'lucide-react';
 import Link from 'next/link';
 
 interface SystemConfig {
@@ -50,44 +50,167 @@ function StatCard({ value, label }: { value: number | string; label: string }) {
   );
 }
 
-// Mermaid diagram with loading state
-function MermaidDiagram({ chart }: { chart: string }) {
+// Mermaid singleton for performance
+let mermaidInstance: typeof import('mermaid').default | null = null;
+
+async function getMermaid() {
+  if (mermaidInstance) return mermaidInstance;
+  const mermaid = (await import('mermaid')).default;
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: 'neutral',
+    themeVariables: { fontSize: '16px' },
+    flowchart: {
+      useMaxWidth: true,
+      htmlLabels: true,
+      nodeSpacing: 50,
+      rankSpacing: 80,
+    },
+  });
+  mermaidInstance = mermaid;
+  return mermaid;
+}
+
+// Mermaid diagram with loading state, error handling, and fullscreen modal
+function MermaidDiagram({ chart, ariaLabel }: { chart: string; ariaLabel?: string }) {
   const ref = useRef<HTMLDivElement>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  const renderDiagram = useCallback(async (targetRef: HTMLDivElement, id: string) => {
+    const mermaid = await getMermaid();
+    targetRef.innerHTML = '';
+    const { svg } = await mermaid.render(id, chart);
+    targetRef.innerHTML = svg;
+
+    // Post-render SVG adjustments for proper sizing
+    const svgElement = targetRef.querySelector('svg');
+    if (svgElement) {
+      svgElement.style.maxWidth = '100%';
+      svgElement.style.height = 'auto';
+      svgElement.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+    }
+  }, [chart]);
 
   useEffect(() => {
     let cancelled = false;
 
     const loadMermaid = async () => {
-      const mermaid = (await import('mermaid')).default;
-      mermaid.initialize({ startOnLoad: false, theme: 'neutral', themeVariables: { fontSize: '14px' } });
-
       if (ref.current && !cancelled) {
         try {
-          ref.current.innerHTML = '';
-          const { svg } = await mermaid.render(`mermaid-${Date.now()}`, chart);
+          await renderDiagram(ref.current, `mermaid-${Date.now()}`);
           if (!cancelled) {
-            ref.current.innerHTML = svg;
+            setIsLoading(false);
+            setError(null);
+          }
+        } catch (err) {
+          console.error('Mermaid error:', err);
+          if (!cancelled) {
+            setError(err instanceof Error ? err.message : 'Diagram render failed');
             setIsLoading(false);
           }
-        } catch (error) {
-          console.error('Mermaid error:', error);
-          if (!cancelled) setIsLoading(false);
         }
       }
     };
     loadMermaid();
 
     return () => { cancelled = true; };
-  }, [chart]);
+  }, [renderDiagram]);
+
+  // Render diagram in modal when expanded
+  useEffect(() => {
+    if (isExpanded && modalRef.current) {
+      renderDiagram(modalRef.current, `mermaid-modal-${Date.now()}`).catch(console.error);
+    }
+  }, [isExpanded, renderDiagram]);
+
+  // Close modal on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isExpanded) {
+        setIsExpanded(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isExpanded]);
+
+  if (error) {
+    return (
+      <div className="p-4 bg-red-50 rounded border border-red-200 text-sm text-red-600">
+        Failed to render diagram: {error}
+      </div>
+    );
+  }
 
   return (
-    <div className="flex justify-center min-h-[120px] items-center">
-      {isLoading && (
-        <div className="text-sm text-slate-400 animate-pulse">Loading diagram...</div>
+    <>
+      <figure role="img" aria-label={ariaLabel || 'Flowchart diagram'} className="relative">
+        {/* Expand button */}
+        <button
+          onClick={() => setIsExpanded(true)}
+          className="absolute top-2 right-2 z-10 p-1.5 bg-white/90 rounded border border-slate-200 hover:bg-slate-100 transition-colors"
+          aria-label="Expand diagram to fullscreen"
+          title="Expand diagram"
+        >
+          <Maximize2 className="w-4 h-4 text-slate-600" />
+        </button>
+
+        {/* Scroll container with fade indicator */}
+        <div className="relative">
+          <div className="overflow-x-auto touch-pan-x scrollbar-thin scrollbar-thumb-slate-300">
+            <div className="flex justify-center min-h-[200px] items-center" style={{ minWidth: '800px' }}>
+              {isLoading && (
+                <div role="status" aria-live="polite" className="text-sm text-slate-400 animate-pulse">
+                  Loading diagram...
+                </div>
+              )}
+              <div ref={ref} className={`w-full ${isLoading ? 'hidden' : ''}`} />
+            </div>
+          </div>
+
+          {/* Fade indicator (right edge) - only show when not loading */}
+          {!isLoading && (
+            <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-white to-transparent pointer-events-none" />
+          )}
+        </div>
+
+        {/* Screen reader description */}
+        <figcaption className="sr-only">
+          {ariaLabel || 'Flowchart showing the data processing pipeline'}
+        </figcaption>
+      </figure>
+
+      {/* Fullscreen modal */}
+      {isExpanded && (
+        <div
+          className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+          onClick={() => setIsExpanded(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Expanded diagram view"
+        >
+          <div
+            className="bg-white rounded-xl max-w-6xl w-full max-h-[90vh] overflow-auto p-6"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-medium text-slate-800">Pipeline Diagram</h3>
+              <button
+                onClick={() => setIsExpanded(false)}
+                className="p-1 hover:bg-slate-100 rounded transition-colors"
+                aria-label="Close expanded view"
+              >
+                <X className="w-5 h-5 text-slate-600" />
+              </button>
+            </div>
+            <div ref={modalRef} className="w-full flex justify-center" />
+          </div>
+        </div>
       )}
-      <div ref={ref} className={isLoading ? 'hidden' : ''} />
-    </div>
+    </>
   );
 }
 
@@ -301,7 +424,9 @@ export default function SystemPage() {
             <div className="space-y-6">
               {/* Mermaid Diagram */}
               <div className="bg-white rounded-lg border border-slate-200 p-6">
-                <MermaidDiagram chart={`graph LR
+                <MermaidDiagram
+                  ariaLabel="Ingestion pipeline flowchart"
+                  chart={`graph LR
     subgraph Sources
         PDF[PDF Files]
         WEB[Web Pages]
@@ -311,7 +436,7 @@ export default function SystemPage() {
     WEB --> C4A[Crawl4AI]
     DOC --> MD[Markdown]
     C4A --> MD
-    MD --> CHK[Chunking]
+    MD --> CHK[Hybrid Chunking]
     CHK --> EMB[Embeddings]
     EMB --> DB[(pgvector)]
 
@@ -321,7 +446,8 @@ export default function SystemPage() {
     style C4A fill:#e0f2fe,stroke:#0ea5e9
     style CHK fill:#fef3c7,stroke:#f59e0b
     style EMB fill:#d1fae5,stroke:#10b981
-    style DB fill:#d1fae5,stroke:#10b981`} />
+    style DB fill:#d1fae5,stroke:#10b981`}
+                />
               </div>
 
               {/* Steps */}
@@ -349,10 +475,10 @@ export default function SystemPage() {
                 <div className="bg-amber-50 rounded-lg p-4 border border-amber-200">
                   <div className="flex items-center gap-2 mb-2">
                     <Zap className="w-4 h-4 text-amber-600" />
-                    <h4 className="font-medium text-slate-800 text-sm">Chunking</h4>
+                    <h4 className="font-medium text-slate-800 text-sm">Hybrid Chunking</h4>
                   </div>
                   <p className="text-xs text-slate-600">
-                    Splits into ~{config?.chunking.chunk_size || 512} token chunks with {config?.chunking.chunk_overlap || 50} overlap.
+                    Token-aware splits respecting document structure (sections, tables). ~{config?.chunking.chunk_size || 512} tokens with heading context.
                   </p>
                 </div>
 
@@ -381,26 +507,27 @@ export default function SystemPage() {
             <div className="space-y-6">
               {/* Mermaid Diagram */}
               <div className="bg-white rounded-lg border border-slate-200 p-6">
-                <MermaidDiagram chart={`graph LR
+                <MermaidDiagram
+                  ariaLabel="Retrieval pipeline: Query → Expansion → Embedding → Semantic + Lexical Search → RRF Fusion → Rerank → LLM"
+                  chart={`graph LR
     Q[Query] --> QE[Query Expansion]
     QE --> E[Embed]
-    E --> V[(pgvector)]
-    E --> F[French FTS]
+    E --> V[Semantic Search]
+    E --> F[Lexical Search]
     V --> |Top-K| R[RRF Fusion]
     F --> |Top-K| R
-    R --> TR[Title Rerank]
-    TR --> C[Context]
-    C --> L[${config?.llm.model?.split('/').pop() || 'LLM'}]
-    L --> S[Stream SSE]
+    R --> TR[Rerank]
+    TR --> L[LLM]
 
     style Q fill:#f1f5f9,stroke:#64748b
     style QE fill:#fef3c7,stroke:#f59e0b
+    style E fill:#d1fae5,stroke:#10b981
     style V fill:#ede9fe,stroke:#8b5cf6
     style F fill:#e0e7ff,stroke:#6366f1
     style R fill:#ccfbf1,stroke:#14b8a6
     style TR fill:#fce7f3,stroke:#ec4899
-    style L fill:#fef3c7,stroke:#d97706
-    style S fill:#dcfce7,stroke:#16a34a`} />
+    style L fill:#fef3c7,stroke:#d97706`}
+                />
               </div>
 
               {/* Explanation - 5 steps now */}

@@ -9,8 +9,8 @@ const geistSans = Geist({
 });
 
 export const metadata: Metadata = {
-  title: "Docling RAG Agent",
-  description: "AI-powered document search with RAG and vector embeddings",
+  title: "Osiris AI Hub",
+  description: "Votre assistant intelligent multi-services",
 };
 
 export default function RootLayout({

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, memo, useCallback } from 'react';
+import { useState, useEffect, memo } from 'react';
 import {
   Popover,
   PopoverContent,
@@ -8,6 +8,7 @@ import {
 } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { AGENT_CONFIG, AGENT_LIST, getAgentConfig } from './agentConfig';
 
 interface Agent {
   id: string;
@@ -44,11 +45,13 @@ export const AgentSelector = memo(function AgentSelector({ selectedAgent, onSele
         }
       } catch (error) {
         console.error('Failed to fetch agents:', error);
-        // Fallback agents for offline
-        setAgents([
-          { id: 'rag', name: 'RAG', icon: '📚', description: 'Knowledge base + Osiris' },
-          { id: 'weather', name: 'Météo', icon: '🌤️', description: 'Weather assistant' },
-        ]);
+        // Fallback to AGENT_LIST config
+        setAgents(AGENT_LIST.map(a => ({
+          id: a.id,
+          name: a.name,
+          icon: '',
+          description: a.description,
+        })));
       }
     };
 
@@ -56,6 +59,7 @@ export const AgentSelector = memo(function AgentSelector({ selectedAgent, onSele
   }, [selectedAgent, onSelectAgent]);
 
   const currentAgent = agents.find(a => a.id === selectedAgent) || agents[0];
+  const currentConfig = currentAgent ? getAgentConfig(currentAgent.id) : null;
 
   if (agents.length === 0) return null;
 
@@ -74,32 +78,53 @@ export const AgentSelector = memo(function AgentSelector({ selectedAgent, onSele
             open && "bg-primary/10 border-primary/20"
           )}
         >
-          <span className="text-base leading-none">{currentAgent?.icon}</span>
-          <span className="text-sm hidden sm:inline">{currentAgent?.name}</span>
+          {currentConfig ? (
+            <>
+              <currentConfig.icon className={cn("h-4 w-4", currentConfig.color)} />
+              <span className="text-sm hidden sm:inline">{currentConfig.name}</span>
+            </>
+          ) : (
+            <span className="text-sm">{currentAgent?.name}</span>
+          )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-48 p-1" align="start">
+      <PopoverContent className="w-52 p-1 z-50" align="start">
         <div className="flex flex-col gap-0.5">
-          {agents.map((agent) => (
-            <button
-              key={agent.id}
-              onClick={() => {
-                onSelectAgent(agent.id);
-                setOpen(false);
-              }}
-              className={cn(
-                "flex items-center gap-2.5 px-3 py-2 rounded-md text-left transition-colors",
-                "hover:bg-accent",
-                selectedAgent === agent.id && "bg-primary/10 text-primary"
-              )}
-            >
-              <span className="text-lg leading-none">{agent.icon}</span>
-              <div className="flex flex-col min-w-0">
-                <span className="font-medium text-sm">{agent.name}</span>
-                <span className="text-xs text-muted-foreground truncate">{agent.description}</span>
-              </div>
-            </button>
-          ))}
+          {agents.map((agent) => {
+            const config = getAgentConfig(agent.id);
+            const IconComponent = config?.icon;
+
+            return (
+              <button
+                key={agent.id}
+                onClick={() => {
+                  onSelectAgent(agent.id);
+                  setOpen(false);
+                }}
+                className={cn(
+                  "flex items-center gap-2.5 px-3 py-2 rounded-md text-left transition-colors",
+                  "hover:bg-accent",
+                  selectedAgent === agent.id && "bg-primary/10 text-primary"
+                )}
+              >
+                {config && IconComponent ? (
+                  <div className={cn("rounded-md p-1.5", config.bgColor)}>
+                    <IconComponent className={cn("h-4 w-4", config.color)} />
+                  </div>
+                ) : (
+                  <div className="rounded-md p-1.5 bg-muted">
+                    <span className="text-sm">{agent.icon || '?'}</span>
+                  </div>
+                )}
+                <div className="flex flex-col min-w-0">
+                  <span className="font-medium text-sm">{config?.name || agent.name}</span>
+                  <span className="text-xs text-muted-foreground truncate">
+                    {config?.description || agent.description}
+                  </span>
+                </div>
+              </button>
+            );
+          })}
         </div>
       </PopoverContent>
     </Popover>

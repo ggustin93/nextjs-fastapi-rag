@@ -9,13 +9,15 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { Trash2, MessageSquare, Settings } from 'lucide-react';
+import { Trash2, Settings } from 'lucide-react';
 import Link from 'next/link';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
 import { ToolActivityIndicator } from './ToolActivityIndicator';
 import { LLMSelector } from './LLMSelector';
 import { useChat } from '@/hooks/useChat';
+import { AGENT_LIST } from './agentConfig';
+import { cn } from '@/lib/utils';
 import type { Source } from '@/types/chat';
 
 interface ChatContainerProps {
@@ -34,7 +36,10 @@ export function ChatContainer({ onOpenDocument }: ChatContainerProps) {
   return (
     <Card className="w-full h-full flex flex-col">
       <CardHeader className="flex flex-row items-center justify-between shrink-0">
-        <CardTitle>Agent RAG Docling</CardTitle>
+        <CardTitle className="font-light tracking-wide">
+          <span className="font-semibold">Osiris</span>
+          <span className="text-muted-foreground/70"> AI Hub</span>
+        </CardTitle>
         <div className="flex items-center gap-2">
           <LLMSelector selectedModel={selectedModel} onSelectModel={setSelectedModel} disabled={isLoading} />
           <Link href="/system">
@@ -71,19 +76,51 @@ export function ChatContainer({ onOpenDocument }: ChatContainerProps) {
         {/* Scrollable messages area */}
         <div className="flex-1 overflow-y-auto px-6 pt-6 pb-4">
           {messages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full gap-6 px-8 animate-in fade-in duration-500">
-              {/* Icon */}
-              <div className="rounded-full bg-primary/10 p-6">
-                <MessageSquare className="h-12 w-12 text-primary" />
-              </div>
-
-              {/* Title + Description */}
-              <div className="text-center space-y-2 max-w-md">
-                <h2 className="text-xl font-semibold">Bienvenue sur l&apos;Agent RAG</h2>
-                <p className="text-muted-foreground text-sm">
-                  Posez des questions sur vos documents et obtenez des réponses IA avec sources
+            <div className="relative flex flex-col items-center justify-center h-full gap-8 px-8 animate-in fade-in duration-500">
+              {/* Subtle geometric background */}
+              <div
+                className="absolute inset-0 opacity-[0.03] pointer-events-none"
+                style={{
+                  backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23000000' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+                  backgroundSize: '60px 60px'
+                }}
+              />
+              {/* Logo */}
+              <div className="relative z-10 text-center space-y-3">
+                <h2 className="text-3xl font-light tracking-wide">
+                  <span className="font-semibold">Osiris</span>
+                  <span className="text-muted-foreground/70"> AI Hub</span>
+                </h2>
+                <p className="text-muted-foreground text-sm font-light">
+                  Assistance par agents spécialisés
                 </p>
               </div>
+
+              {/* Agent Cards Grid */}
+              <div className="relative z-10 grid grid-cols-2 gap-3 w-full max-w-md">
+                {AGENT_LIST.map((agent) => {
+                  const IconComponent = agent.icon;
+                  return (
+                    <div
+                      key={agent.id}
+                      className="flex items-start gap-3 p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
+                    >
+                      <div className={cn("rounded-md p-2", agent.bgColor)}>
+                        <IconComponent className={cn("h-4 w-4", agent.color)} />
+                      </div>
+                      <div className="space-y-0.5">
+                        <p className="text-sm font-medium">{agent.name}</p>
+                        <p className="text-xs text-muted-foreground">{agent.description}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Hint */}
+              <p className="relative z-10 text-xs text-muted-foreground/60">
+                Tapez votre question ou utilisez @agent pour cibler un service
+              </p>
             </div>
           ) : (
             <div className="space-y-3">

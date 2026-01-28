@@ -6,26 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Send, Loader2 } from 'lucide-react';
 import { AgentSelector } from './AgentSelector';
 import { cn } from '@/lib/utils';
-
-// Agent suggestions for autocomplete
-const AGENT_SUGGESTIONS = [
-  { id: 'rag', name: 'RAG', icon: '📚', keywords: ['rag', 'assistant', 'kb', 'knowledge'] },
-  { id: 'weather', name: 'Météo', icon: '🌤️', keywords: ['weather', 'meteo', 'météo'] },
-];
-
-// Agent ID mapping (includes aliases)
-const AGENT_ALIASES: Record<string, string> = {
-  rag: 'rag',
-  assistant: 'rag',
-  default: 'rag',
-  kb: 'rag',
-  weather: 'weather',
-  meteo: 'weather',
-  météo: 'weather',
-};
-
-// Valid agent IDs for error feedback
-const VALID_AGENT_IDS = new Set(Object.values(AGENT_ALIASES));
+import { AGENT_LIST, AGENT_ALIASES, type AgentConfig } from './agentConfig';
 
 interface ChatInputProps {
   onSend: (message: string) => void;
@@ -38,7 +19,7 @@ export function ChatInput({ onSend, disabled, selectedAgent, onSelectAgent }: Ch
   const [input, setInput] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [filteredAgents, setFilteredAgents] = useState(AGENT_SUGGESTIONS);
+  const [filteredAgents, setFilteredAgents] = useState<AgentConfig[]>(AGENT_LIST);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -47,10 +28,10 @@ export function ChatInput({ onSend, disabled, selectedAgent, onSelectAgent }: Ch
     const mentionMatch = input.match(/^@([\w\u00C0-\u024F]*)$/i);
     if (mentionMatch) {
       const query = mentionMatch[1].toLowerCase();
-      const filtered = AGENT_SUGGESTIONS.filter(agent =>
+      const filtered = AGENT_LIST.filter(agent =>
         agent.keywords.some(kw => kw.startsWith(query)) || agent.name.toLowerCase().startsWith(query)
       );
-      setFilteredAgents(filtered.length > 0 ? filtered : AGENT_SUGGESTIONS);
+      setFilteredAgents(filtered.length > 0 ? filtered : AGENT_LIST);
       setShowSuggestions(true);
       setSelectedIndex(0);
     } else {
@@ -82,7 +63,7 @@ export function ChatInput({ onSend, disabled, selectedAgent, onSelectAgent }: Ch
         return;
       } else if (!agentId) {
         // Unknown agent - show error feedback
-        setErrorMessage(`Agent "@${mention}" inconnu. Utilisez @rag ou @weather`);
+        setErrorMessage(`Agent "@${mention}" inconnu. Tapez @ pour voir les agents disponibles`);
         setInput(value.slice(mentionMatch[0].length));
         setShowSuggestions(false);
         // Auto-clear error after 3 seconds
@@ -160,24 +141,32 @@ export function ChatInput({ onSend, disabled, selectedAgent, onSelectAgent }: Ch
               <div className="px-2 py-1.5 text-xs text-muted-foreground font-medium">
                 Agents
               </div>
-              {filteredAgents.map((agent, index) => (
-                <button
-                  key={agent.id}
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    selectAgent(agent.id);
-                  }}
-                  onMouseEnter={() => setSelectedIndex(index)}
-                  className={cn(
-                    "w-full flex items-center gap-2.5 px-2 py-2 rounded-md text-left transition-colors",
-                    index === selectedIndex ? "bg-accent text-accent-foreground" : "hover:bg-accent/50"
-                  )}
-                >
-                  <span className="text-lg leading-none">{agent.icon}</span>
-                  <span className="font-medium text-sm">{agent.name}</span>
-                  <span className="ml-auto text-xs text-muted-foreground">@{agent.id}</span>
-                </button>
-              ))}
+              {filteredAgents.map((agent, index) => {
+                const IconComponent = agent.icon;
+                return (
+                  <button
+                    key={agent.id}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      selectAgent(agent.id);
+                    }}
+                    onMouseEnter={() => setSelectedIndex(index)}
+                    className={cn(
+                      "w-full flex items-center gap-2.5 px-2 py-2 rounded-md text-left transition-colors",
+                      index === selectedIndex ? "bg-accent text-accent-foreground" : "hover:bg-accent/50"
+                    )}
+                  >
+                    <div className={cn("rounded-md p-1.5", agent.bgColor)}>
+                      <IconComponent className={cn("h-4 w-4", agent.color)} />
+                    </div>
+                    <div className="flex flex-col min-w-0">
+                      <span className="font-medium text-sm">{agent.name}</span>
+                      <span className="text-xs text-muted-foreground truncate">{agent.description}</span>
+                    </div>
+                    <span className="ml-auto text-xs text-muted-foreground">@{agent.id}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}
