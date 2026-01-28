@@ -27,7 +27,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic_ai import Agent
 
-from app.api import agents, chat, documents, health, system, worksites
+from app.api import agents, chat, documents, health, system, tickets, worksites
 from app.middleware import PerformanceMiddleware
 from packages.__version__ import __version__
 from packages.config import settings
@@ -192,6 +192,7 @@ app.include_router(documents.router, prefix="/api/v1")
 app.include_router(health.router, prefix="/api/v1")
 app.include_router(system.router, prefix="/api/v1")
 app.include_router(worksites.router, prefix="/api/v1")
+app.include_router(tickets.router, prefix="/api/v1")
 
 
 @app.get("/")
