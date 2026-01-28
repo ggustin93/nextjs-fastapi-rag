@@ -119,3 +119,4 @@ scripts/test_osiris_tool.py
 services/web/public/*.svg
 
 claudedocs/
+node_modules/*
