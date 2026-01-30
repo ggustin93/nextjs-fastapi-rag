@@ -1,0 +1,182 @@
+{
+  "name": "french_rag_evaluation_v1",
+  "version": "1.0",
+  "description": "Evaluation dataset for French RAG system (Osiris/Brussels urban planning worksites). Replace placeholder IDs with actual document/chunk UUIDs from your database.",
+  "metadata": {
+    "language": "fr",
+    "domain": "urban_planning",
+    "region": "brussels",
+    "created": "2026-01-30",
+    "instructions": "To populate expected_doc_ids: 1) Run each query against your indexed documents, 2) Manually identify the most relevant chunks, 3) Copy their UUIDs here"
+  },
+  "queries": [
+    {
+      "query": "C'est quoi un chantier de type A?",
+      "expected_doc_ids": [],
+      "intent": "definition",
+      "difficulty": "easy",
+      "notes": "Direct definition query - should match 'Occupation de type A' document title"
+    },
+    {
+      "query": "Qu'est-ce qu'une occupation de type D?",
+      "expected_doc_ids": [],
+      "intent": "definition",
+      "difficulty": "easy",
+      "notes": "Should match 'Occupation de type D' document"
+    },
+    {
+      "query": "C'est quoi une occupation de type E?",
+      "expected_doc_ids": [],
+      "intent": "definition",
+      "difficulty": "easy",
+      "notes": "Should match 'Occupation de type E' document"
+    },
+    {
+      "query": "Quelle est la différence entre type D et type E?",
+      "expected_doc_ids": [],
+      "intent": "comparison",
+      "difficulty": "medium",
+      "notes": "Requires retrieving info from both Type D and Type E documents"
+    },
+    {
+      "query": "Comment faire une demande d'échafaudage?",
+      "expected_doc_ids": [],
+      "intent": "procedure",
+      "difficulty": "medium",
+      "notes": "Should match Echaffaudage document with procedure steps"
+    },
+    {
+      "query": "Comment demander une zone de stationnement temporaire?",
+      "expected_doc_ids": [],
+      "intent": "procedure",
+      "difficulty": "medium",
+      "notes": "Should match Zone de stationnement document"
+    },
+    {
+      "query": "Quel est le délai pour une occupation de moins de 24h?",
+      "expected_doc_ids": [],
+      "intent": "deadline",
+      "difficulty": "easy",
+      "notes": "Should match 'Moins de 24h' document with deadline info"
+    },
+    {
+      "query": "Combien de temps avant le chantier dois-je faire ma demande?",
+      "expected_doc_ids": [],
+      "intent": "deadline",
+      "difficulty": "medium",
+      "notes": "Generic deadline question - may match multiple documents"
+    },
+    {
+      "query": "Comment fonctionne la Commission de Coordination des Chantiers?",
+      "expected_doc_ids": [],
+      "intent": "procedure",
+      "difficulty": "medium",
+      "notes": "Should match M4 Commission de Coordination slides"
+    },
+    {
+      "query": "Qui contacter pour un problème avec Osiris?",
+      "expected_doc_ids": [],
+      "intent": "contact",
+      "difficulty": "easy",
+      "notes": "Should match helpdesk/FAQ content from myosiris website"
+    },
+    {
+      "query": "Comment signaler un bug dans Osiris?",
+      "expected_doc_ids": [],
+      "intent": "procedure",
+      "difficulty": "easy",
+      "notes": "Should match bug-report page from myosiris"
+    },
+    {
+      "query": "Comment obtenir l'accès à Osiris?",
+      "expected_doc_ids": [],
+      "intent": "procedure",
+      "difficulty": "medium",
+      "notes": "Should match request-access page from myosiris"
+    },
+    {
+      "query": "Qu'est-ce que GeoGantt?",
+      "expected_doc_ids": [],
+      "intent": "definition",
+      "difficulty": "medium",
+      "notes": "Should match M16 GeoGantt slides"
+    },
+    {
+      "query": "Comment faire une demande de déménagement ou livraison?",
+      "expected_doc_ids": [],
+      "intent": "procedure",
+      "difficulty": "easy",
+      "notes": "Should match Déménagement-livraison document"
+    },
+    {
+      "query": "Quelles sont les règles pour la tenue de chantier?",
+      "expected_doc_ids": [],
+      "intent": "procedure",
+      "difficulty": "medium",
+      "notes": "Should match M8 Tenue de Chantier slides"
+    },
+    {
+      "query": "Comment faire une extension de chantier dans Osiris?",
+      "expected_doc_ids": [],
+      "intent": "procedure",
+      "difficulty": "hard",
+      "notes": "Should match M13 Extensions Osiris slides"
+    },
+    {
+      "query": "Quels sont les recours possibles en cas de refus?",
+      "expected_doc_ids": [],
+      "intent": "procedure",
+      "difficulty": "hard",
+      "notes": "Should match M11 Conciliation Recours slides"
+    },
+    {
+      "query": "Comment utiliser l'API Osiris?",
+      "expected_doc_ids": [],
+      "intent": "procedure",
+      "difficulty": "hard",
+      "notes": "Should match osiris-api technical documentation"
+    },
+    {
+      "query": "Quelles sont les modifications récentes de l'ordonnance?",
+      "expected_doc_ids": [],
+      "intent": "definition",
+      "difficulty": "hard",
+      "notes": "Should match M12 Modifications ordonnance slides"
+    },
+    {
+      "query": "Comment fonctionne le système de coordonnées Lambert utilisé par Osiris?",
+      "expected_doc_ids": [],
+      "intent": "out_of_scope",
+      "difficulty": "hard",
+      "notes": "Technical GIS question - may have some technical docs but likely out of main scope"
+    },
+    {
+      "query": "Quelle est la capitale de la Belgique?",
+      "expected_doc_ids": [],
+      "intent": "out_of_scope",
+      "difficulty": "easy",
+      "notes": "General knowledge question, completely outside domain"
+    },
+    {
+      "query": "Comment faire du vélo à Bruxelles?",
+      "expected_doc_ids": [],
+      "intent": "out_of_scope",
+      "difficulty": "easy",
+      "notes": "Brussels-related but outside urban planning/worksite domain"
+    },
+    {
+      "query": "Quel est le tarif pour une occupation de voirie?",
+      "expected_doc_ids": [],
+      "intent": "definition",
+      "difficulty": "medium",
+      "notes": "Should match cost/pricing documentation from myosiris"
+    },
+    {
+      "query": "Comment accéder aux formations Osiris?",
+      "expected_doc_ids": [],
+      "intent": "procedure",
+      "difficulty": "easy",
+      "notes": "Should match training/request-training pages"
+    }
+  ]
+}

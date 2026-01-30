@@ -223,6 +223,7 @@ class SupabaseRestClient:
         exclude_toc: bool = True,
         rrf_k: int = 50,
         max_per_doc: int = 3,
+        ef_search: int = 100,
     ) -> List[Dict[str, Any]]:
         """
         Hybrid search combining vector similarity and French keyword matching.
@@ -238,6 +239,7 @@ class SupabaseRestClient:
             exclude_toc: Whether to exclude TOC chunks marked during ingestion
             rrf_k: RRF parameter (default: 50). Lower values give more weight to top-ranked results.
             max_per_doc: Maximum chunks per document for source diversity (default: 3)
+            ef_search: HNSW ef_search parameter (default: 100). Higher values improve recall at cost of latency.
 
         Returns:
             List of matching chunks with similarity and RRF scores
@@ -256,6 +258,7 @@ class SupabaseRestClient:
                     "exclude_toc": exclude_toc,
                     "rrf_k": rrf_k,
                     "max_per_doc": max_per_doc,
+                    "ef_search": ef_search,
                 },
             ).execute()
 
