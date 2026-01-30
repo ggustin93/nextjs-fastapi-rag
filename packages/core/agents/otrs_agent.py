@@ -119,14 +119,14 @@ Utilise pour:
 """
 
 OTRS_AGENT = AgentConfig(
-    id="otrs-agent",
+    id="otrs",
     name="OTRS Agent",
     icon="🎫",
     system_prompt=OTRS_SYSTEM_PROMPT,
     enabled_tools=["search_otrs_tickets", "get_otrs_ticket"],
     temperature=0.3,
     description="Analyse interne de tickets OTRS",
-    aliases=["otrs", "tickets"],
+    aliases=["tickets", "otrs-agent"],  # "otrs-agent" for backward compat with old ID
 )
 
 register_agent(OTRS_AGENT)
