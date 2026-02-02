@@ -4,7 +4,12 @@
 
 BEGIN;
 
--- Replace hybrid_search function with ef_search support
+-- Drop existing hybrid_search function(s) to avoid signature conflicts
+-- PostgreSQL requires explicit DROP when changing argument list
+DROP FUNCTION IF EXISTS hybrid_search(text, vector, int, float, int, boolean, int);
+DROP FUNCTION IF EXISTS hybrid_search(text, vector(1536), int, float, int, boolean, int);
+
+-- Create hybrid_search function with ef_search support
 CREATE OR REPLACE FUNCTION hybrid_search(
   query_text text,
   query_embedding vector(1536),

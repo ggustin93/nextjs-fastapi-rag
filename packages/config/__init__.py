@@ -328,6 +328,21 @@ class SearchConfig:
     query_expansion_model: str = field(
         default_factory=lambda: os.getenv("QUERY_EXPANSION_MODEL", "gpt-4o-mini")
     )
+    # Cross-encoder reranker configuration
+    # Reranker improves precision by rescoring results with a cross-encoder model
+    reranker_enabled: bool = field(
+        default_factory=lambda: os.getenv("RERANKER_ENABLED", "false").lower() == "true"
+    )
+    reranker_model: str = field(
+        default_factory=lambda: os.getenv("RERANKER_MODEL", "BAAI/bge-reranker-v2-m3")
+    )
+    reranker_top_k: int = field(default_factory=lambda: int(os.getenv("RERANKER_TOP_K", "10")))
+    reranker_batch_size: int = field(
+        default_factory=lambda: int(os.getenv("RERANKER_BATCH_SIZE", "32"))
+    )
+    reranker_fallback_enabled: bool = field(
+        default_factory=lambda: os.getenv("RERANKER_FALLBACK_ENABLED", "true").lower() == "true"
+    )
 
 
 @dataclass(frozen=True)

@@ -76,6 +76,9 @@ async def get_system_config():
             "title_rerank_boost": settings.search.title_rerank_boost,
             "rrf_k": settings.search.rrf_k,
             "similarity_threshold": settings.search.similarity_threshold,
+            "reranker_enabled": settings.search.reranker_enabled,
+            "reranker_model": settings.search.reranker_model,
+            "reranker_top_k": settings.search.reranker_top_k,
         },
     }
 

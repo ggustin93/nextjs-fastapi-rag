@@ -201,6 +201,25 @@ async def search_knowledge_base(
             rrf_k=settings.search.rrf_k,
         )
 
+        # Apply cross-encoder reranking (if enabled)
+        # Uses original query (not expanded) for more precise relevance scoring
+        if settings.search.reranker_enabled and results:
+            from packages.core.reranker import RerankerConfig, rerank_results
+
+            reranker_config = RerankerConfig(
+                enabled=True,
+                model=settings.search.reranker_model,
+                top_k=limit or settings.search.default_limit,
+                batch_size=settings.search.reranker_batch_size,
+                fallback_enabled=settings.search.reranker_fallback_enabled,
+            )
+            results = await rerank_results(
+                query=query,  # Use original query, not expanded
+                results=results,
+                config=reranker_config,
+            )
+            logger.info(f"Cross-encoder reranked to {len(results)} results")
+
         # Apply title-based re-ranking to boost relevant documents (if enabled)
         if settings.search.title_rerank_enabled:
             keywords = _extract_keywords(query)

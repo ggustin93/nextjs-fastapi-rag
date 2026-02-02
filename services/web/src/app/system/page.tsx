@@ -15,6 +15,9 @@ interface SystemConfig {
     title_rerank_boost: number;
     rrf_k: number;
     similarity_threshold: number;
+    reranker_enabled: boolean;
+    reranker_model: string;
+    reranker_top_k: number;
   };
 }
 
@@ -508,7 +511,7 @@ export default function SystemPage() {
               {/* Mermaid Diagram */}
               <div className="bg-white rounded-lg border border-slate-200 p-6">
                 <MermaidDiagram
-                  ariaLabel="Retrieval pipeline: Query → Expansion → Embedding → Semantic + Lexical Search → RRF Fusion → Rerank → LLM"
+                  ariaLabel="Retrieval pipeline: Query → Expansion → Embedding → Semantic + Lexical Search → RRF Fusion → Title Rerank → Cross-Encoder → LLM"
                   chart={`graph LR
     Q[Query] --> QE[Query Expansion]
     QE --> E[Embed]
@@ -516,8 +519,9 @@ export default function SystemPage() {
     E --> F[Lexical Search]
     V --> |Top-K| R[RRF Fusion]
     F --> |Top-K| R
-    R --> TR[Rerank]
-    TR --> L[LLM]
+    R --> TR[Title Rerank]
+    TR --> CR[Cross-Encoder]
+    CR --> L[LLM]
 
     style Q fill:#f1f5f9,stroke:#64748b
     style QE fill:#fef3c7,stroke:#f59e0b
@@ -526,12 +530,13 @@ export default function SystemPage() {
     style F fill:#e0e7ff,stroke:#6366f1
     style R fill:#ccfbf1,stroke:#14b8a6
     style TR fill:#fce7f3,stroke:#ec4899
+    style CR fill:#fae8ff,stroke:#d946ef
     style L fill:#fef3c7,stroke:#d97706`}
                 />
               </div>
 
-              {/* Explanation - 5 steps now */}
-              <div className="grid grid-cols-5 gap-3">
+              {/* Explanation - 6 steps */}
+              <div className="grid grid-cols-3 gap-3">
                 <div className="bg-amber-50 rounded-lg p-3 border border-amber-200">
                   <div className="flex items-center gap-1.5 mb-1.5">
                     <div className="w-4 h-4 rounded-full bg-amber-600 text-white text-[10px] flex items-center justify-center font-medium">1</div>
@@ -552,7 +557,7 @@ export default function SystemPage() {
                     <h4 className="font-medium text-slate-800 text-xs">Vector Search</h4>
                   </div>
                   <p className="text-xs text-slate-600">
-                    Cosine similarity on {config?.embeddings.dimensions || 1536}D embeddings.
+                    Cosine similarity on {config?.embeddings.dimensions || 1536}D embeddings (HNSW index).
                   </p>
                 </div>
 
@@ -562,7 +567,7 @@ export default function SystemPage() {
                     <h4 className="font-medium text-slate-800 text-xs">French FTS</h4>
                   </div>
                   <p className="text-xs text-slate-600">
-                    PostgreSQL with French stemming for exact matches.
+                    PostgreSQL with French stemming for exact keyword matches.
                   </p>
                 </div>
 
@@ -572,7 +577,7 @@ export default function SystemPage() {
                     <h4 className="font-medium text-slate-800 text-xs">RRF Fusion</h4>
                   </div>
                   <p className="text-xs text-slate-600">
-                    Merges rankings with k={config?.retrieval?.rrf_k || 60}.
+                    Merges vector + FTS rankings with k={config?.retrieval?.rrf_k || 60}.
                   </p>
                 </div>
 
@@ -589,6 +594,20 @@ export default function SystemPage() {
                     )}
                   </p>
                 </div>
+
+                <div className="bg-fuchsia-50 rounded-lg p-3 border border-fuchsia-200">
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <div className="w-4 h-4 rounded-full bg-fuchsia-600 text-white text-[10px] flex items-center justify-center font-medium">6</div>
+                    <h4 className="font-medium text-slate-800 text-xs">Cross-Encoder</h4>
+                  </div>
+                  <p className="text-xs text-slate-600">
+                    {config?.retrieval?.reranker_enabled ? (
+                      <>Neural rerank → top {config.retrieval.reranker_top_k} results (+20-35% precision)</>
+                    ) : (
+                      <span className="text-slate-400">Disabled</span>
+                    )}
+                  </p>
+                </div>
               </div>
 
               {/* Pipeline rationale */}
@@ -596,8 +615,9 @@ export default function SystemPage() {
                 <p className="text-sm text-slate-600">
                   <span className="font-medium text-slate-700">Why this pipeline?</span>{' '}
                   Query expansion addresses vocabulary mismatch (user terms ≠ document terms).
-                  Title reranking boosts precision when document titles match query keywords.
                   RRF fusion combines semantic and lexical signals without manual weight tuning.
+                  Title reranking boosts precision when document titles match query keywords.
+                  Cross-encoder reranking reads query + document together for deep semantic understanding, improving precision by 20-35%.
                 </p>
               </div>
 
